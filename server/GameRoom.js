@@ -56,7 +56,7 @@ export class GameRoom {
     this.gameState.pile = [];
     this.gameState.passCount = 0;
     this.gameState.finishOrder = [];
-    this.log(`ROUND ${this.gameState.round} START`);
+    this.log(`ROUND ${this.gameState.round} START - Asshole (${this.players[this.gameState.currentPlayerIndex].name}) leads`);
     return { success: true };
   }
 
@@ -144,6 +144,7 @@ export class GameRoom {
     this.gameState.swapPending = {};
     this.gameState.swapsCompleted = {};
     this.initializeSwaps();
+    this.log(`SWAP PHASE - Asshole will lead next round`);
   }
 
   initializeSwaps() {
@@ -182,7 +183,7 @@ export class GameRoom {
 
     swap.cards = selected;
     this.gameState.swapsCompleted[playerId] = true;
-    this.log(`Player ${playerId} submitted swap`);
+    this.log(`Player ${playerId} (${this.gameState.roles[playerId]}) submitted swap`);
 
     const allCompleted = this.checkAndProcessSwaps();
 
@@ -212,7 +213,31 @@ export class GameRoom {
     }
 
     this.players.forEach(p => { p.hand = RankSystem.sortCards(p.hand, this.options); });
-    this.startGame();
+
+    // Set Asshole (Vice Asshole if 3 players) as the starting player
+    let asshole = null;
+    for (const p of this.players) {
+      const role = this.gameState.roles[p.id];
+      if (role === 'Asshole' || role === 'Vice Asshole') {
+        asshole = p;
+        break;
+      }
+    }
+
+    if (asshole) {
+      this.gameState.currentPlayerIndex = this.players.indexOf(asshole);
+      this.log(`Asshole (${asshole.name}) will lead next round`);
+    }
+
+    this.gameState.phase = 'playing';
+    this.gameState.round++;
+    this.gameState.lastPlay = { type: 'none', cards: [], rank: 0, length: 0 };
+    this.gameState.lastPlayerId = null;
+    this.gameState.pile = [];
+    this.gameState.passCount = 0;
+    this.gameState.finishOrder = [];
+
+    this.log(`ROUND ${this.gameState.round} START - Phase: playing`);
     return true;
   }
 
