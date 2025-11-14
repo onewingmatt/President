@@ -1,8 +1,8 @@
-app = "president-game"
+app = "president"
 primary_region = "sjc"
 
 [build]
-  builder = "us-docker.pkg.dev/paketo-buildpacks/builder/base"
+  builder = "heroku/builder:24"
 
 [[services]]
   internal_port = 8080

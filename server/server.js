@@ -22,6 +22,6 @@ registerGameEvents(io);
 
 const PORT = process.env.PORT || 8080;
 server.listen(PORT, () => {
-  console.log(`🎮 President v1.6.15`);
+  console.log(`🎮 President v1.6.16`);
   console.log(`📡 http://localhost:${PORT}`);
 });
