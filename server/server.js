@@ -1,0 +1,11 @@
+import express from 'express';
+import{createServer}from'http';
+import{Server}from'socket.io';
+import cors from'cors';
+import{registerGameEvents}from'./controllers/gameEvents.js';
+const app=express();
+const server=createServer(app);
+const io=new Server(server,{cors:{origin:"*"}});
+app.use(cors());
+registerGameEvents(io);
+server.listen(process.env.PORT||8080,()=>console.log('🎮 President v1.6.13\n📡 http://localhost:8080'));
