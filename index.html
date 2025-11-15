@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>President v1.6.53</title>
+<title>President v1.6.55</title>
 <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
@@ -45,10 +45,12 @@ html,body{width:100%;height:100%;overflow:hidden;font-family:Arial,sans-serif;ba
 .swap-role{font-size:.85em;color:#ffe0b2;text-align:center;margin-bottom:8px;font-weight:bold}
 .swap-instruction{font-size:.75em;color:#fff;margin-bottom:8px;text-align:center;background:rgba(0,0,0,.2);padding:6px;border-radius:4px}
 .swap-card-display{display:flex;flex-wrap:wrap;gap:3px;justify-content:center;margin-bottom:8px;background:rgba(0,0,0,.2);padding:8px;border-radius:6px}
-.swap-card{width:36px;height:54px;background:linear-gradient(135deg,#fff,#f0f0f0);border:2px solid #333;border-radius:3px;display:flex;flex-direction:column;align-items:center;justify-content:space-between;padding:2px;cursor:pointer;transition:all .2s}
+.swap-card{width:38px;height:56px;background:linear-gradient(135deg,#fff,#f0f0f0);border:2px solid #333;border-radius:3px;display:flex;flex-direction:column;align-items:center;justify-content:space-between;padding:2px;cursor:pointer;transition:all .2s}
 .swap-card.red{color:#d32f2f}
 .swap-card.black{color:#1a1a1a}
 .swap-card.selected{background:linear-gradient(135deg,#51cf66,#1a8c3a);color:#fff;border-color:#ffeb3b;transform:scale(1.1);box-shadow:0 2px 8px rgba(255,235,59,.8)}
+.swap-card-rank{font-size:10px;font-weight:bold}
+.swap-card-suit{font-size:11px}
 .swap-buttons{display:flex;gap:6px}
 .swap-buttons button{flex:1;padding:12px;background:#fff;color:#ff9800;border:none;border-radius:6px;cursor:pointer;font-weight:bold;font-size:.95em;box-shadow:0 2px 4px rgba(0,0,0,.3)}
 .swap-buttons button:active{background:#ffe0b2;transform:scale(.96)}
@@ -96,7 +98,9 @@ html,body{overflow:auto}
 .swap-role{font-size:1.4em;margin-bottom:16px}
 .swap-instruction{font-size:1.3em;padding:14px;margin-bottom:16px}
 .swap-card-display{gap:12px;padding:20px}
-.swap-card{width:90px;height:130px;border-radius:8px;border-width:3px}
+.swap-card{width:90px;height:130px;border-radius:8px;border-width:3px;padding:6px}
+.swap-card-rank{font-size:22px}
+.swap-card-suit{font-size:26px}
 .swap-buttons{gap:16px}
 .swap-buttons button{padding:20px;font-size:1.4em}
 .neutral-section{padding:30px;margin:25px 0;border-radius:12px}
@@ -114,7 +118,7 @@ html,body{overflow:auto}
 </head>
 <body>
 <button class="sound-toggle" id="soundToggle" onclick="toggleSound()">🔊</button>
-<div class="version">v1.6.53</div>
+<div class="version">v1.6.55</div>
 <div class="game">
 <div id="setupSection">
 <input type="text" id="playerName" placeholder="Your Name">
@@ -195,7 +199,7 @@ function getSwapInstructions(role,count){if(role==='President')return`You're PRE
 function getRoleAbbr(role){if(!role)return'';if(role==='President')return'Pre';if(role==='Vice President')return'VP';if(role==='Neutral')return'Neu';if(role==='Vice Asshole')return'VA';if(role==='Asshole')return'Ass';return role.substring(0,3);}
 function rejoinRoom(){if(room&&playerName){log('🔄 Rejoining room...');socket.emit('rejoin-game',{roomCode:room,playerName:playerName});}}
 function autoConnect(){socket=io(window.location.origin,{reconnection:true,reconnectionDelay:1000,reconnectionAttempts:10,transports:['websocket','polling']});socket.on('connect',()=>{myId=socket.id;log('✅ Connected');if(room&&playerName){setTimeout(rejoinRoom,500);}});socket.on('disconnect',()=>log('⚠️ Reconnecting...'));socket.on('game-created',d=>{room=d.roomCode;document.getElementById('roomCode').value=d.roomCode;log('Room: '+d.roomCode);});socket.on('game-started',()=>{log('🎮 Started!');document.getElementById('setupSection').style.display='none';});socket.on('game-state-update',s=>{currentPhase=s.phase;renderPlayers(s);renderPile(s);myRole=s.roles[myId]||'';const roleText=myRole?`Your Role: ${myRole}`:'';document.getElementById('roleDisplay').textContent=roleText;document.getElementById('currentTurn').textContent=s.currentPlayerName+(s.isYourTurn?' (YOUR TURN)':'');const wasMyTurn=isMyTurn;isMyTurn=s.isYourTurn;if(isMyTurn&&!wasMyTurn)playSound('yourturn');syncGameLog(s.gameLog);if(s.phase==='swapping'){const swap=s.swapRequired;if(swap&&s.players){const me=s.players.find(p=>p.id===myId);if(me&&me.hand){hand=me.hand;swapInfo=swap;document.getElementById('swapSection').classList.add('active');document.getElementById('neutralSection').classList.remove('active');document.getElementById('handArea').style.display='none';document.getElementById('swapRole').textContent=`Role: ${myRole}`;document.getElementById('swapInstruction').textContent=getSwapInstructions(myRole,swap.count);renderSwapCards();}}else{document.getElementById('swapSection').classList.remove('active');if(myRole&&myRole==='Neutral'){document.getElementById('neutralSection').classList.add('active');document.getElementById('neutralRole').textContent=`You are: ${myRole}`;document.getElementById('handArea').style.display='block';if(s.players){const m=s.players.find(p=>p.id===myId);if(m&&m.hand){hand=m.hand;renderHand();}}}else{document.getElementById('neutralSection').classList.remove('active');document.getElementById('handArea').style.display='block';document.getElementById('handDisplay').innerHTML='<span style="color:#888">Waiting for swaps...</span>';}}document.getElementById('playBtn').disabled=true;document.getElementById('passBtn').disabled=true;}else{document.getElementById('swapSection').classList.remove('active');document.getElementById('neutralSection').classList.remove('active');document.getElementById('handArea').style.display='block';if(s.players){const m=s.players.find(p=>p.id===myId);if(m&&m.hand){hand=m.hand;renderHand();}}document.getElementById('playBtn').disabled=!s.isYourTurn;document.getElementById('passBtn').disabled=!s.lastPlay||s.lastPlay.type==='none'||!s.isYourTurn;}});socket.on('error',d=>log('❌ '+d.message));}
-function renderSwapCards(){const d=document.getElementById('swapCardDisplay');if(!hand||hand.length===0){d.innerHTML='<span style="color:#fff">Loading cards...</span>';return;}d.innerHTML='';hand.forEach((c,i)=>{const card=document.createElement('div');card.className='swap-card '+((c.suit==='H'||c.suit==='D')?'red':'black')+(swapSel.has(i)?' selected':'');const su={H:'♥',D:'♦',C:'♣',S:'♠'}[c.suit];card.innerHTML='<span style="font-size:8px">'+c.rank+'</span><span style="font-size:9px">'+su+'</span>';card.onclick=()=>{if(swapInfo&&swapSel.size>=swapInfo.count&&!swapSel.has(i))return;swapSel.has(i)?swapSel.delete(i):swapSel.add(i);renderSwapCards();};d.appendChild(card);});}
+function renderSwapCards(){const d=document.getElementById('swapCardDisplay');if(!hand||hand.length===0){d.innerHTML='<span style="color:#fff">Loading cards...</span>';return;}d.innerHTML='';hand.forEach((c,i)=>{const card=document.createElement('div');card.className='swap-card '+((c.suit==='H'||c.suit==='D')?'red':'black')+(swapSel.has(i)?' selected':'');const su={H:'♥',D:'♦',C:'♣',S:'♠'}[c.suit];card.innerHTML='<span class="swap-card-rank">'+c.rank+'</span><span class="swap-card-suit">'+su+'</span>';card.onclick=()=>{if(swapInfo&&swapSel.size>=swapInfo.count&&!swapSel.has(i))return;swapSel.has(i)?swapSel.delete(i):swapSel.add(i);renderSwapCards();};d.appendChild(card);});}
 function renderPlayers(s){const list=document.getElementById('playersRow');list.innerHTML='';s.players.forEach(p=>{const d=document.createElement('div');d.className='player-card'+(p.id===s.currentPlayerId?' active':'')+(p.id===myId?' you':'');const roleAbbr=getRoleAbbr(s.roles[p.id]);const role=roleAbbr?' ('+roleAbbr+')':'';d.innerHTML='<div class="player-name">'+p.name+role+(p.isCPU?'<span style="background:#9775fa;padding:1px 3px;border-radius:3px;font-size:.6em;margin-left:2px">CPU</span>':'')+'</div><div class="player-info">'+p.handSize+' cards</div>';list.appendChild(d);});}
 function renderPile(s){const p=document.getElementById('pileDisplay');if(!s.lastPlay||!s.lastPlay.cards||s.lastPlay.cards.length===0){p.innerHTML='<span style="color:#888;font-size:.8em">Clear</span>';return;}p.innerHTML='';s.lastPlay.cards.forEach(c=>{const d=document.createElement('div');d.className='pile-card '+((c.suit==='H'||c.suit==='D')?'red':'black');const su={H:'♥',D:'♦',C:'♣',S:'♠'}[c.suit];d.textContent=c.rank+su;p.appendChild(d);});}
 function renderHand(){const h=document.getElementById('handDisplay');if(!hand||hand.length===0){h.innerHTML='<span style="color:#888">No cards</span>';return;}h.innerHTML='';hand.forEach((c,i)=>{const d=document.createElement('div');d.className='card '+((c.suit==='H'||c.suit==='D')?'red':'black')+(sel.has(i)?' selected':'');const su={H:'♥',D:'♦',C:'♣',S:'♠'}[c.suit];d.innerHTML='<span class="card-rank">'+c.rank+'</span><span class="card-suit">'+su+'</span>';d.onclick=()=>{sel.has(i)?sel.delete(i):sel.add(i);renderHand();};h.appendChild(d);});}
