@@ -122,23 +122,19 @@ export function registerGameEvents(io) {
       if (result.success) {
         console.log(`[SUBMIT-SWAP] Swap accepted. allCompleted=${result.allCompleted}`);
 
-        // ALWAYS broadcast state update
         room.players.forEach(p => {
           io.to(p.id).emit('game-state-update', room.getPublicState(p.id));
         });
 
-        // If all swaps are done, game should have transitioned to 'playing'
         if (result.allCompleted) {
           console.log(`[SWAP-COMPLETE] All swaps done. Phase: ${room.gameState.phase}`);
 
-          // Small delay then broadcast final state
           setTimeout(() => {
             console.log(`[SWAP-BROADCAST] Broadcasting final state. Phase: ${room.gameState.phase}`);
             room.players.forEach(p => {
               io.to(p.id).emit('game-state-update', room.getPublicState(p.id));
             });
 
-            // Trigger CPU turn if needed
             if (room.gameState.phase === 'playing' && room.isCurrentPlayerCPU()) {
               console.log(`[CPU-START] Starting CPU turn`);
               triggerCPUTurn(io, room);

@@ -153,7 +153,6 @@ export class GameRoom {
     this.log(`Initializing swaps for ${n} players`);
 
     if (n === 2) {
-      // Just 2 players - swap both
       const p1 = this.gameState.finishOrder[0];
       const p2 = this.gameState.finishOrder[1];
       if (p1 && p2) {
@@ -161,7 +160,6 @@ export class GameRoom {
         this.gameState.swapPending[p2] = { to: p1, count: 1, cards: [] };
       }
     } else if (n === 3) {
-      // 3 players: President swaps with Asshole (2 cards each way)
       const pid = this.gameState.finishOrder[0];
       const aid = this.gameState.finishOrder[2];
       if (pid && aid) {
@@ -170,11 +168,10 @@ export class GameRoom {
         this.log(`3-player swap: ${pid} <-> ${aid} (2 cards each)`);
       }
     } else {
-      // 4+ players
-      const pid = this.gameState.finishOrder[0];    // President
-      const vid = this.gameState.finishOrder[1];    // Vice President
-      const vaid = this.gameState.finishOrder[n - 2]; // Vice Asshole
-      const aid = this.gameState.finishOrder[n - 1];  // Asshole
+      const pid = this.gameState.finishOrder[0];
+      const vid = this.gameState.finishOrder[1];
+      const vaid = this.gameState.finishOrder[n - 2];
+      const aid = this.gameState.finishOrder[n - 1];
 
       if (aid && pid) {
         this.gameState.swapPending[aid] = { to: pid, count: 2, cards: [] };
@@ -234,7 +231,6 @@ export class GameRoom {
 
     this.log(`ALL SWAPS COMPLETE! Processing card exchanges...`);
 
-    // Process swaps BOTH directions
     for (const fromId of Object.keys(this.gameState.swapPending)) {
       const swap = this.gameState.swapPending[fromId];
       const from = this.players.find(p => p.id === fromId);

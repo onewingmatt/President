@@ -1,6 +1,6 @@
 {
   "name": "president-game",
-  "version": "1.6.18",
+  "version": "1.6.20",
   "description": "Multiplayer President Card Game",
   "type": "module",
   "main": "server/server.js",
