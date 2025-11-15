@@ -22,6 +22,6 @@ registerGameEvents(io);
 
 const PORT = process.env.PORT || 8080;
 server.listen(PORT, () => {
-  console.log(`🎮 President v1.6.23 - FIXED`);
+  console.log(`🎮 President v1.6.26 - Multi-player`);
   console.log(`📡 http://localhost:${PORT}`);
 });

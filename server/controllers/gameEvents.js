@@ -40,13 +40,23 @@ export function registerGameEvents(io) {
 
     socket.on('create-game', (data) => {
       const roomCode = generateRoomCode();
-      const room = new GameRoom(roomCode, socket.id, data.options);
+      const numPlayers = Math.min(8, Math.max(2, data.options.num_players || 4));
+      const numCPU = Math.min(numPlayers - 1, Math.max(0, data.options.numCPU || 0));
+
+      const room = new GameRoom(roomCode, socket.id, {
+        ...data.options,
+        num_players: numPlayers,
+        num_decks: numPlayers > 4 ? 2 : 1
+      });
+
       room.addPlayer(socket.id, data.playerName, false);
-      if (data.options.addCPU) {
-        for (let i = 0; i < data.options.numCPU; i++) {
+
+      if (data.options.addCPU && numCPU > 0) {
+        for (let i = 0; i < numCPU; i++) {
           room.addPlayer('CPU-' + i + '-' + Date.now(), 'CPU ' + (i + 1), true);
         }
       }
+
       gameRooms.set(roomCode, room);
       socket.join(roomCode);
       socket.emit('game-created', { roomCode });

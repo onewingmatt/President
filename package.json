@@ -1,7 +1,7 @@
 {
   "name": "president-game",
-  "version": "1.6.23",
-  "description": "Multiplayer President Card Game",
+  "version": "1.6.26",
+  "description": "Multiplayer President Card Game - 2-8 Players",
   "type": "module",
   "main": "server/server.js",
   "scripts": {

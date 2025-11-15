@@ -33,7 +33,8 @@ export class GameRoom {
   }
 
   dealCards() {
-    const deck = new Deck(this.options.num_decks);
+    const numDecks = this.options.num_players > 4 ? 2 : 1;
+    const deck = new Deck(numDecks);
     deck.shuffle();
     const hands = deck.deal(this.players.length);
     this.players.forEach((p, i) => {
@@ -195,15 +196,12 @@ export class GameRoom {
       this.startGameAfterSwap();
       return true;
     }
-
     const allDone = pendingIds.every(id => this.gameState.swapsCompleted[id]);
     if (!allDone) {
       this.log(`Swaps: ${Object.keys(this.gameState.swapsCompleted).length}/${pendingIds.length}`);
       return false;
     }
-
-    this.log(`🔄 ALL SWAPS COMPLETE - Processing...`);
-
+    this.log(`🔄 ALL SWAPS COMPLETE`);
     for (const fromId of pendingIds) {
       const swap = this.gameState.swapPending[fromId];
       const from = this.players.find(p => p.id === fromId);
@@ -217,7 +215,6 @@ export class GameRoom {
         }
       }
     }
-
     this.players.forEach(p => { p.hand = RankSystem.sortCards(p.hand, this.options); });
     this.startGameAfterSwap();
     return true;
