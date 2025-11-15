@@ -56,7 +56,7 @@ export class GameRoom {
     this.gameState.pile = [];
     this.gameState.passCount = 0;
     this.gameState.finishOrder = [];
-    this.log(`ROUND ${this.gameState.round} START`);
+    this.log(`ROUND ${this.gameState.round} START - Asshole (${this.players[this.gameState.currentPlayerIndex].name}) leads`);
     return { success: true };
   }
 
@@ -144,7 +144,6 @@ export class GameRoom {
     this.gameState.swapPending = {};
     this.gameState.swapsCompleted = {};
     this.initializeSwaps();
-    this.log(`SWAP PHASE - Asshole will lead next round`);
   }
 
   initializeSwaps() {
@@ -183,7 +182,7 @@ export class GameRoom {
 
     swap.cards = selected;
     this.gameState.swapsCompleted[playerId] = true;
-    this.log(`Player ${playerId} (${this.gameState.roles[playerId]}) submitted swap`);
+    this.log(`Player ${playerId} (${this.gameState.roles[playerId]}) submitted swap with ${selected.length} card(s)`);
 
     const allCompleted = this.checkAndProcessSwaps();
 
@@ -192,28 +191,48 @@ export class GameRoom {
 
   checkAndProcessSwaps() {
     const pendingIds = Object.keys(this.gameState.swapPending);
-    const allDone = pendingIds.length > 0 && pendingIds.every(id => this.gameState.swapsCompleted[id]);
+    if (pendingIds.length === 0) {
+      this.log(`No swaps needed, starting game`);
+      this.startGameAfterSwap();
+      return true;
+    }
 
-    if (!allDone) return false;
+    const allDone = pendingIds.every(id => this.gameState.swapsCompleted[id]);
 
-    this.log(`ALL SWAPS COMPLETE! Processing...`);
+    if (!allDone) {
+      const completed = Object.keys(this.gameState.swapsCompleted).length;
+      this.log(`Swaps in progress: ${completed}/${pendingIds.length}`);
+      return false;
+    }
+
+    this.log(`ALL SWAPS COMPLETE! Processing card exchanges...`);
 
     for (const [fromId, swap] of Object.entries(this.gameState.swapPending)) {
       const from = this.players.find(p => p.id === fromId);
       const to = this.players.find(p => p.id === swap.to);
-      if (!from || !to) continue;
+      if (!from || !to) {
+        this.log(`ERROR: Could not find players for swap`);
+        continue;
+      }
 
-      swap.cards.forEach(card => {
+      for (const card of swap.cards) {
         const idx = from.hand.findIndex(c => c.rank === card.rank && c.suit === card.suit);
         if (idx !== -1) {
           from.hand.splice(idx, 1);
           to.hand.push(card);
+          this.log(`Swapped card ${card.rank}${card.suit} from ${fromId} to ${swap.to}`);
         }
-      });
+      }
     }
 
     this.players.forEach(p => { p.hand = RankSystem.sortCards(p.hand, this.options); });
 
+    this.log(`Card exchanges complete. Starting next game...`);
+    this.startGameAfterSwap();
+    return true;
+  }
+
+  startGameAfterSwap() {
     let asshole = null;
     for (const p of this.players) {
       const role = this.gameState.roles[p.id];
@@ -223,7 +242,10 @@ export class GameRoom {
       }
     }
 
-    if (asshole) {
+    if (!asshole) {
+      this.log(`ERROR: No Asshole found! Starting with first player`);
+      this.gameState.currentPlayerIndex = 0;
+    } else {
       this.gameState.currentPlayerIndex = this.players.indexOf(asshole);
       this.log(`Asshole (${asshole.name}) will lead next round`);
     }
@@ -235,9 +257,10 @@ export class GameRoom {
     this.gameState.pile = [];
     this.gameState.passCount = 0;
     this.gameState.finishOrder = [];
+    this.gameState.swapPending = {};
+    this.gameState.swapsCompleted = {};
 
-    this.log(`ROUND ${this.gameState.round} START - Phase: playing`);
-    return true;
+    this.log(`ROUND ${this.gameState.round} STARTED - Phase: playing`);
   }
 
   autoSwapForCPU(playerId) {
