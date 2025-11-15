@@ -139,42 +139,67 @@ export class GameRoom {
     }
 
     this.gameState.roles = GameRules.assignRoles(this.gameState.finishOrder, this.players.length);
+    this.log(`Roles assigned: ${JSON.stringify(this.gameState.roles)}`);
     this.dealCards();
     this.gameState.phase = 'swapping';
     this.gameState.swapPending = {};
     this.gameState.swapsCompleted = {};
     this.initializeSwaps();
+    this.log(`Swap phase initialized. Pending swaps: ${Object.keys(this.gameState.swapPending).length}`);
   }
 
   initializeSwaps() {
     const n = this.players.length;
-    if (n === 3) {
+    this.log(`Initializing swaps for ${n} players`);
+
+    if (n === 2) {
+      // Just 2 players - swap both
+      const p1 = this.gameState.finishOrder[0];
+      const p2 = this.gameState.finishOrder[1];
+      if (p1 && p2) {
+        this.gameState.swapPending[p1] = { to: p2, count: 1, cards: [] };
+        this.gameState.swapPending[p2] = { to: p1, count: 1, cards: [] };
+      }
+    } else if (n === 3) {
+      // 3 players: President swaps with Asshole (2 cards each way)
       const pid = this.gameState.finishOrder[0];
       const aid = this.gameState.finishOrder[2];
       if (pid && aid) {
         this.gameState.swapPending[aid] = { to: pid, count: 2, cards: [] };
         this.gameState.swapPending[pid] = { to: aid, count: 2, cards: [] };
+        this.log(`3-player swap: ${pid} <-> ${aid} (2 cards each)`);
       }
     } else {
-      const pid = this.gameState.finishOrder[0];
-      const vid = this.gameState.finishOrder[1];
-      const vaid = this.gameState.finishOrder[n - 2];
-      const aid = this.gameState.finishOrder[n - 1];
+      // 4+ players
+      const pid = this.gameState.finishOrder[0];    // President
+      const vid = this.gameState.finishOrder[1];    // Vice President
+      const vaid = this.gameState.finishOrder[n - 2]; // Vice Asshole
+      const aid = this.gameState.finishOrder[n - 1];  // Asshole
+
       if (aid && pid) {
         this.gameState.swapPending[aid] = { to: pid, count: 2, cards: [] };
         this.gameState.swapPending[pid] = { to: aid, count: 2, cards: [] };
+        this.log(`4-player swap: ${pid} <-> ${aid} (2 cards each)`);
       }
+
       if (vaid && vid) {
         this.gameState.swapPending[vaid] = { to: vid, count: 1, cards: [] };
         this.gameState.swapPending[vid] = { to: vaid, count: 1, cards: [] };
+        this.log(`4-player swap: ${vid} <-> ${vaid} (1 card each)`);
       }
     }
+
+    this.log(`Swap pending count: ${Object.keys(this.gameState.swapPending).length}`);
   }
 
   submitSwap(playerId, cardIndices) {
     if (this.gameState.phase !== 'swapping') return { success: false, error: 'Not swapping' };
     const swap = this.gameState.swapPending[playerId];
-    if (!swap || cardIndices.length !== swap.count) return { success: false, error: 'Invalid swap' };
+    if (!swap) {
+      this.log(`ERROR: No swap pending for ${playerId}`);
+      return { success: false, error: 'No swap needed for your role' };
+    }
+    if (cardIndices.length !== swap.count) return { success: false, error: 'Invalid swap count' };
 
     const player = this.players.find(p => p.id === playerId);
     const selected = cardIndices.map(i => player.hand[i]).filter(c => c);
@@ -191,6 +216,8 @@ export class GameRoom {
 
   checkAndProcessSwaps() {
     const pendingIds = Object.keys(this.gameState.swapPending);
+    this.log(`checkAndProcessSwaps: pendingIds=${pendingIds.length}, completed=${Object.keys(this.gameState.swapsCompleted).length}`);
+
     if (pendingIds.length === 0) {
       this.log(`No swaps needed, starting game`);
       this.startGameAfterSwap();
@@ -207,20 +234,24 @@ export class GameRoom {
 
     this.log(`ALL SWAPS COMPLETE! Processing card exchanges...`);
 
-    for (const [fromId, swap] of Object.entries(this.gameState.swapPending)) {
+    // Process swaps BOTH directions
+    for (const fromId of Object.keys(this.gameState.swapPending)) {
+      const swap = this.gameState.swapPending[fromId];
       const from = this.players.find(p => p.id === fromId);
       const to = this.players.find(p => p.id === swap.to);
+
       if (!from || !to) {
         this.log(`ERROR: Could not find players for swap`);
         continue;
       }
+
+      this.log(`Swapping ${swap.cards.length} cards from ${fromId} to ${swap.to}`);
 
       for (const card of swap.cards) {
         const idx = from.hand.findIndex(c => c.rank === card.rank && c.suit === card.suit);
         if (idx !== -1) {
           from.hand.splice(idx, 1);
           to.hand.push(card);
-          this.log(`Swapped card ${card.rank}${card.suit} from ${fromId} to ${swap.to}`);
         }
       }
     }
