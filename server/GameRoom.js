@@ -56,7 +56,7 @@ export class GameRoom {
     this.gameState.pile = [];
     this.gameState.passCount = 0;
     this.gameState.finishOrder = [];
-    this.log(`ROUND ${this.gameState.round} START - Asshole (${this.players[this.gameState.currentPlayerIndex].name}) leads`);
+    this.log(`ROUND ${this.gameState.round} START`);
     return { success: true };
   }
 
@@ -214,7 +214,6 @@ export class GameRoom {
 
     this.players.forEach(p => { p.hand = RankSystem.sortCards(p.hand, this.options); });
 
-    // Set Asshole (Vice Asshole if 3 players) as the starting player
     let asshole = null;
     for (const p of this.players) {
       const role = this.gameState.roles[p.id];

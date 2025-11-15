@@ -1,4 +1,4 @@
-# President v1.6.16 - Multiplayer Card Game
+# President v1.6.18 - Multiplayer Card Game
 
 ## ✨ Features
 
@@ -9,25 +9,28 @@
 ✅ Sound effects
 ✅ Live on https://president.fly.dev
 
-## 🐛 Latest Fixes (v1.6.16)
+## 🐛 Latest Fixes (v1.6.18)
 
-✓ Fixed swap submission & game state
-✓ CPU turn triggers after swaps
-✓ Correct Fly app name (president)
+✓ Auto-connect on page load
+✓ Asshole always leads after swap
+✓ Setup controls always visible
+✓ Better swap phase UI with role info
+✓ Auto-reconnect if disconnected
 ✓ Working heroku/builder:24
-✓ All URLs match correct domain
 
-## 🚀 Deployed & Running
+## 🚀 Live & Deployed
 
 Live: https://president.fly.dev
 
 ## 🎮 How to Play
 
-1. Create a game or join with room code
-2. Play cards higher than last play
-3. Pass if you can't beat
-4. Swap cards after round
-5. Next round starts automatically
+1. Page loads and auto-connects
+2. Enter your name
+3. Create a game or join with room code
+4. Play cards higher than last play
+5. Pass if you can't beat
+6. Swap cards after round
+7. Next round starts automatically
 
 ## 📝 Development
 
@@ -37,3 +40,9 @@ node server/server.js
 ```
 
 Open http://localhost:8080
+
+## 🚀 Deploy
+
+```bash
+.\DEPLOY-TO-FLY.bat
+```
