@@ -6,9 +6,6 @@ export class GameRules {
     for (let i = 0; i < players.length; i++) {
       if (players[i].hand.some(c => c.rank === '3' && c.suit === 'H')) return i;
     }
-    for (let i = 0; i < players.length; i++) {
-      if (roles[players[i].id] === 'Asshole') return i;
-    }
     return 0;
   }
   static assignRoles(finishOrder, totalPlayers) {

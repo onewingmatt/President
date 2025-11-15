@@ -15,9 +15,7 @@ function triggerCPUTurn(io, room, depth = 0) {
     if (room.gameState.phase !== 'playing') return;
     const result = room.executeCPUTurn();
     if (!result?.success) return;
-
-    room.players.forEach(player => io.to(player.id).emit('game-state-update', room.getPublicState(player.id)));
-
+    room.players.forEach(p => io.to(p.id).emit('game-state-update', room.getPublicState(p.id)));
     if (result.roundEnded) return;
     if (room.gameState.phase === 'playing') {
       const next = room.players[room.gameState.currentPlayerIndex];
@@ -30,7 +28,6 @@ function handleCPUSwaps(io, room) {
   if (room.gameState.phase !== 'swapping') return;
   const cpuPlayers = room.players.filter(p => p.isCPU && room.gameState.swapPending[p.id] && !room.gameState.swapsCompleted[p.id]);
   if (cpuPlayers.length === 0) return;
-
   setTimeout(() => {
     cpuPlayers.forEach(cpu => { room.autoSwapForCPU(cpu.id); });
     room.players.forEach(p => io.to(p.id).emit('game-state-update', room.getPublicState(p.id)));
@@ -83,9 +80,7 @@ export function registerGameEvents(io) {
       const result = room.playCards(socket.id, data.cardIndices);
       if (result.success) {
         room.players.forEach(p => io.to(p.id).emit('game-state-update', room.getPublicState(p.id)));
-        if (result.roundEnded) { 
-          handleCPUSwaps(io, room); 
-        } else if (room.gameState.phase === 'playing') {
+        if (result.roundEnded) { handleCPUSwaps(io, room); } else if (room.gameState.phase === 'playing') {
           const next = room.players[room.gameState.currentPlayerIndex];
           if (next.isCPU) setTimeout(() => triggerCPUTurn(io, room), 400);
         }
@@ -111,38 +106,17 @@ export function registerGameEvents(io) {
 
     socket.on('submit-swap', (data) => {
       const room = gameRooms.get(data.roomCode);
-      if (!room) {
-        console.log(`[SUBMIT-SWAP] Room not found: ${data.roomCode}`);
-        return;
-      }
-
-      console.log(`[SUBMIT-SWAP] Received swap from ${socket.id}`);
+      if (!room) return;
       const result = room.submitSwap(socket.id, data.cardIndices);
-
       if (result.success) {
-        console.log(`[SUBMIT-SWAP] Swap accepted. allCompleted=${result.allCompleted}`);
-
-        room.players.forEach(p => {
-          io.to(p.id).emit('game-state-update', room.getPublicState(p.id));
-        });
-
+        room.players.forEach(p => io.to(p.id).emit('game-state-update', room.getPublicState(p.id)));
         if (result.allCompleted) {
-          console.log(`[SWAP-COMPLETE] All swaps done. Phase: ${room.gameState.phase}`);
-
           setTimeout(() => {
-            console.log(`[SWAP-BROADCAST] Broadcasting final state. Phase: ${room.gameState.phase}`);
-            room.players.forEach(p => {
-              io.to(p.id).emit('game-state-update', room.getPublicState(p.id));
-            });
-
-            if (room.gameState.phase === 'playing' && room.isCurrentPlayerCPU()) {
-              console.log(`[CPU-START] Starting CPU turn`);
-              triggerCPUTurn(io, room);
-            }
+            room.players.forEach(p => io.to(p.id).emit('game-state-update', room.getPublicState(p.id)));
+            if (room.gameState.phase === 'playing' && room.isCurrentPlayerCPU()) triggerCPUTurn(io, room);
           }, 500);
         }
       } else {
-        console.log(`[SUBMIT-SWAP] Swap rejected: ${result.error}`);
         socket.emit('error', { message: result.error });
       }
     });

@@ -26,7 +26,6 @@ export class GameRoom {
   }
 
   log(msg) { console.log(`[GAMEROOM ${this.roomCode}] ${msg}`); }
-
   addPlayer(playerId, playerName, isCPU = false) {
     if (this.players.length >= this.options.num_players) return { success: false, error: 'Full' };
     this.players.push({ id: playerId, name: playerName, isCPU, hand: [], finished: false, finishPosition: null });
@@ -56,7 +55,7 @@ export class GameRoom {
     this.gameState.pile = [];
     this.gameState.passCount = 0;
     this.gameState.finishOrder = [];
-    this.log(`ROUND ${this.gameState.round} START - Asshole (${this.players[this.gameState.currentPlayerIndex].name}) leads`);
+    this.log(`ROUND ${this.gameState.round} START`);
     return { success: true };
   }
 
@@ -65,20 +64,17 @@ export class GameRoom {
     if (!player || this.gameState.phase !== 'playing' || player.finished) return { success: false, error: 'Invalid' };
     const current = this.players[this.gameState.currentPlayerIndex];
     if (current.id !== playerId) return { success: false, error: 'Not your turn' };
-
     const selected = cardIndices.map(i => player.hand[i]).filter(c => c);
     const playType = Validator.getPlayType(selected, this.options);
     if (playType.type === 'invalid') return { success: false, error: playType.error };
     const beatCheck = Validator.canBeatPlay(playType, this.gameState.lastPlay, this.options);
     if (!beatCheck.canBeat) return { success: false, error: 'Cards too low' };
-
     player.hand = player.hand.filter((c, i) => !cardIndices.includes(i));
     player.hand = RankSystem.sortCards(player.hand, this.options);
     this.gameState.lastPlayerId = playerId;
     this.gameState.lastPlay = playType;
     this.gameState.pile.push(...selected);
     this.gameState.passCount = 0;
-
     if (player.hand.length === 0) {
       player.finished = true;
       player.finishPosition = this.gameState.finishOrder.length + 1;
@@ -88,7 +84,6 @@ export class GameRoom {
         return { success: true, playType, roundEnded: true };
       }
     }
-
     this.advanceToNextPlayer();
     return { success: true, playType };
   }
@@ -97,7 +92,6 @@ export class GameRoom {
     const current = this.players[this.gameState.currentPlayerIndex];
     if (current.id !== playerId || current.finished) return { success: false, error: 'Invalid' };
     if (this.gameState.lastPlay.type === 'none') return { success: false, error: 'Cannot pass when leading' };
-
     this.gameState.passCount++;
     const active = this.players.filter(p => !p.finished).length;
     if (this.gameState.passCount >= active - 1) {
@@ -137,7 +131,6 @@ export class GameRoom {
       lastPlayer.finishPosition = this.gameState.finishOrder.length + 1;
       this.gameState.finishOrder.push(lastPlayer.id);
     }
-
     this.gameState.roles = GameRules.assignRoles(this.gameState.finishOrder, this.players.length);
     this.dealCards();
     this.gameState.phase = 'swapping';
@@ -163,7 +156,6 @@ export class GameRoom {
       if (pid && aid) {
         this.gameState.swapPending[aid] = { to: pid, count: 2, cards: [] };
         this.gameState.swapPending[pid] = { to: aid, count: 2, cards: [] };
-        this.log(`3-player swap: ${pid} <-> ${aid} (2 cards each)`);
       }
     } else {
       const pid = this.gameState.finishOrder[0];
@@ -174,73 +166,49 @@ export class GameRoom {
       if (aid && pid) {
         this.gameState.swapPending[aid] = { to: pid, count: 2, cards: [] };
         this.gameState.swapPending[pid] = { to: aid, count: 2, cards: [] };
-        this.log(`4-player swap: ${pid} <-> ${aid} (2 cards each)`);
       }
-
       if (vaid && vid) {
         this.gameState.swapPending[vaid] = { to: vid, count: 1, cards: [] };
         this.gameState.swapPending[vid] = { to: vaid, count: 1, cards: [] };
-        this.log(`4-player swap: ${vid} <-> ${vaid} (1 card each)`);
       }
     }
 
-    this.log(`Swap pending count: ${Object.keys(this.gameState.swapPending).length}`);
+    this.log(`✅ Swap pending count: ${Object.keys(this.gameState.swapPending).length}`);
   }
 
   submitSwap(playerId, cardIndices) {
     if (this.gameState.phase !== 'swapping') return { success: false, error: 'Not swapping' };
     const swap = this.gameState.swapPending[playerId];
-    if (!swap) {
-      this.log(`ERROR: No swap pending for ${playerId}`);
-      return { success: false, error: 'No swap needed for your role' };
-    }
+    if (!swap) return { success: false, error: 'No swap needed for your role' };
     if (cardIndices.length !== swap.count) return { success: false, error: 'Invalid swap count' };
-
     const player = this.players.find(p => p.id === playerId);
     const selected = cardIndices.map(i => player.hand[i]).filter(c => c);
     if (selected.length !== swap.count) return { success: false, error: 'Invalid cards' };
-
     swap.cards = selected;
     this.gameState.swapsCompleted[playerId] = true;
-    this.log(`Player ${playerId} (${this.gameState.roles[playerId]}) submitted swap with ${selected.length} card(s)`);
-
-    const allCompleted = this.checkAndProcessSwaps();
-
-    return { success: true, allCompleted };
+    return { success: true, allCompleted: this.checkAndProcessSwaps() };
   }
 
   checkAndProcessSwaps() {
     const pendingIds = Object.keys(this.gameState.swapPending);
-    this.log(`checkAndProcessSwaps: pendingIds=${pendingIds.length}, completed=${Object.keys(this.gameState.swapsCompleted).length}`);
-
     if (pendingIds.length === 0) {
-      this.log(`No swaps needed, starting game`);
       this.startGameAfterSwap();
       return true;
     }
 
     const allDone = pendingIds.every(id => this.gameState.swapsCompleted[id]);
-
     if (!allDone) {
-      const completed = Object.keys(this.gameState.swapsCompleted).length;
-      this.log(`Swaps in progress: ${completed}/${pendingIds.length}`);
+      this.log(`Swaps: ${Object.keys(this.gameState.swapsCompleted).length}/${pendingIds.length}`);
       return false;
     }
 
-    this.log(`ALL SWAPS COMPLETE! Processing card exchanges...`);
+    this.log(`🔄 ALL SWAPS COMPLETE - Processing...`);
 
-    for (const fromId of Object.keys(this.gameState.swapPending)) {
+    for (const fromId of pendingIds) {
       const swap = this.gameState.swapPending[fromId];
       const from = this.players.find(p => p.id === fromId);
       const to = this.players.find(p => p.id === swap.to);
-
-      if (!from || !to) {
-        this.log(`ERROR: Could not find players for swap`);
-        continue;
-      }
-
-      this.log(`Swapping ${swap.cards.length} cards from ${fromId} to ${swap.to}`);
-
+      if (!from || !to) continue;
       for (const card of swap.cards) {
         const idx = from.hand.findIndex(c => c.rank === card.rank && c.suit === card.suit);
         if (idx !== -1) {
@@ -251,8 +219,6 @@ export class GameRoom {
     }
 
     this.players.forEach(p => { p.hand = RankSystem.sortCards(p.hand, this.options); });
-
-    this.log(`Card exchanges complete. Starting next game...`);
     this.startGameAfterSwap();
     return true;
   }
@@ -266,15 +232,7 @@ export class GameRoom {
         break;
       }
     }
-
-    if (!asshole) {
-      this.log(`ERROR: No Asshole found! Starting with first player`);
-      this.gameState.currentPlayerIndex = 0;
-    } else {
-      this.gameState.currentPlayerIndex = this.players.indexOf(asshole);
-      this.log(`Asshole (${asshole.name}) will lead next round`);
-    }
-
+    this.gameState.currentPlayerIndex = asshole ? this.players.indexOf(asshole) : 0;
     this.gameState.phase = 'playing';
     this.gameState.round++;
     this.gameState.lastPlay = { type: 'none', cards: [], rank: 0, length: 0 };
@@ -284,8 +242,7 @@ export class GameRoom {
     this.gameState.finishOrder = [];
     this.gameState.swapPending = {};
     this.gameState.swapsCompleted = {};
-
-    this.log(`ROUND ${this.gameState.round} STARTED - Phase: playing`);
+    this.log(`🎮 ROUND ${this.gameState.round} STARTED`);
   }
 
   autoSwapForCPU(playerId) {
@@ -293,22 +250,18 @@ export class GameRoom {
     if (!swap) return;
     const player = this.players.find(p => p.id === playerId);
     if (!player || player.hand.length === 0) return;
-
     const role = this.gameState.roles[playerId];
     const sorted = RankSystem.sortCards(player.hand, this.options);
     let indices = [];
-
     if (role === 'Asshole' || role === 'Vice Asshole') {
       indices = sorted.slice(-swap.count).map(c => player.hand.findIndex(x => x.rank === c.rank && x.suit === c.suit));
     } else {
       indices = sorted.slice(0, swap.count).map(c => player.hand.findIndex(x => x.rank === c.rank && x.suit === c.suit));
     }
-
     this.submitSwap(playerId, indices);
   }
 
   isCurrentPlayerCPU() { return this.players[this.gameState.currentPlayerIndex]?.isCPU || false; }
-
   executeCPUTurn() {
     const current = this.players[this.gameState.currentPlayerIndex];
     if (!current?.isCPU || current.finished) return { success: false };
