@@ -139,13 +139,11 @@ export class GameRoom {
     }
 
     this.gameState.roles = GameRules.assignRoles(this.gameState.finishOrder, this.players.length);
-    this.log(`Roles assigned: ${JSON.stringify(this.gameState.roles)}`);
     this.dealCards();
     this.gameState.phase = 'swapping';
     this.gameState.swapPending = {};
     this.gameState.swapsCompleted = {};
     this.initializeSwaps();
-    this.log(`Swap phase initialized. Pending swaps: ${Object.keys(this.gameState.swapPending).length}`);
   }
 
   initializeSwaps() {
