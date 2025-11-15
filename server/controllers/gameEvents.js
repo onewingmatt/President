@@ -111,26 +111,42 @@ export function registerGameEvents(io) {
 
     socket.on('submit-swap', (data) => {
       const room = gameRooms.get(data.roomCode);
-      if (!room) return;
+      if (!room) {
+        console.log(`[SUBMIT-SWAP] Room not found: ${data.roomCode}`);
+        return;
+      }
 
+      console.log(`[SUBMIT-SWAP] Received swap from ${socket.id}`);
       const result = room.submitSwap(socket.id, data.cardIndices);
 
       if (result.success) {
-        console.log(`[SWAP] Player ${socket.id} submitted swap. All completed: ${result.allCompleted}`);
+        console.log(`[SUBMIT-SWAP] Swap accepted. allCompleted=${result.allCompleted}`);
 
-        room.players.forEach(p => io.to(p.id).emit('game-state-update', room.getPublicState(p.id)));
+        // ALWAYS broadcast state update
+        room.players.forEach(p => {
+          io.to(p.id).emit('game-state-update', room.getPublicState(p.id));
+        });
 
-        if (result.allCompleted && room.gameState.phase === 'playing') {
-          console.log(`[SWAP DONE] All swaps completed. Round restarted.`);
+        // If all swaps are done, game should have transitioned to 'playing'
+        if (result.allCompleted) {
+          console.log(`[SWAP-COMPLETE] All swaps done. Phase: ${room.gameState.phase}`);
 
+          // Small delay then broadcast final state
           setTimeout(() => {
+            console.log(`[SWAP-BROADCAST] Broadcasting final state. Phase: ${room.gameState.phase}`);
+            room.players.forEach(p => {
+              io.to(p.id).emit('game-state-update', room.getPublicState(p.id));
+            });
+
+            // Trigger CPU turn if needed
             if (room.gameState.phase === 'playing' && room.isCurrentPlayerCPU()) {
-              console.log(`[CPU] Triggering CPU turn`);
+              console.log(`[CPU-START] Starting CPU turn`);
               triggerCPUTurn(io, room);
             }
-          }, 1000);
+          }, 500);
         }
       } else {
+        console.log(`[SUBMIT-SWAP] Swap rejected: ${result.error}`);
         socket.emit('error', { message: result.error });
       }
     });
