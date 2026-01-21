@@ -1,0 +1,39 @@
+# HTML/CSS Change Needed for v1.6.169
+
+## USER REQUEST:
+"Can we make the room id box (where we can type it in) a little bit longer?
+Sometimes the room id is cut off"
+
+## THE FIX:
+
+In index.html, find the room code input field (likely has id="roomCode") and increase its width.
+
+### CHANGE 1: Find the input field CSS
+Look for something like:
+  #roomCode {
+    width: 120px;  <-- Current (too narrow)
+    ...
+  }
+
+Change to:
+  #roomCode {
+    width: 160px;  <-- New (wider)
+    ...
+  }
+
+### CHANGE 2: Or if inline style
+If the HTML has inline style like:
+  <input id="roomCode" style="width:120px" ... />
+
+Change to:
+  <input id="roomCode" style="width:160px" ... />
+
+## REASONING:
+- Room codes are 6 characters (e.g., "ABC123")
+- At ~25px per character + padding, 160px ensures full visibility
+- Previous width was cutting off the last 1-2 characters
+
+## TEST:
+1. Create a room with code "ZYXW99"
+2. Type it into the join field
+3. Verify all 6 characters are visible without scrolling

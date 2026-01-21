@@ -1,0 +1,20 @@
+v1.6.162 - Fix 2-on-2 Bug
+
+SINGLE FILE CHANGED:
+  Validator.js - Added check to prevent 2 beating another 2
+
+THE FIX (5 lines):
+  if (newPlay.type === 'single' && newPlay.hasTwo) {
+    if (lastPlay.hasTwo) {
+      return { canBeat: false, error: 'Cannot beat same rank' };
+    }
+    return { canBeat: true };
+  }
+
+BEFORE: 2 could beat another 2 (WRONG)
+AFTER:  2 cannot beat another 2 (CORRECT)
+
+TEST ADDED: '2 cannot beat 2' in test.js
+
+All other files unchanged from v1.6.161
+(game.js, index.html version strings updated)

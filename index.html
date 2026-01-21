@@ -1,208 +1,756 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>President v1.6.141 - Turn Notification Only</title>
-    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
-    <style>
-        :root {
-            --hand-size: 4.0; --table-size: 4.0; --players-size: 2.0; --card-radius: 20px;
-            --log-size: 1.8; --button-size: 2.0; --table-height: 80px; --hand-height: 150px; --log-height: 120px;
-        }
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        html, body { width: 100%; height: 100%; font-family: Arial, sans-serif; background: #0a1f0f; color: #fff; }
-        .container { width: 100vw; height: 100vh; display: flex; flex-direction: column; gap: 5px; overflow: hidden; padding: 5px; }
-        .setup { background: #1a8c3a; padding: 4px 5px; border-radius: 4px; display: flex; gap: 3px; flex-wrap: nowrap; align-items: center; flex-shrink: 0; overflow-x: auto; }
-        input, select { padding: 4px 5px; border-radius: 3px; border: 1px solid #ccc; font-size: 10px; min-width: 0; }
-        button { padding: 4px 6px; background: #ffeb3b; color: #000; border: none; border-radius: 3px; cursor: pointer; font-weight: bold; font-size: 10px; white-space: nowrap; }
-        .room-btn { padding: 4px 5px; background: #ffeb3b; color: #000; border: none; border-radius: 3px; cursor: pointer; font-size: 10px; font-weight: bold; }
-        .top-bar { background: #1a8c3a; padding: 6px; text-align: center; color: #ffeb3b; font-size: 12px; flex-shrink: 0; }
-        .players { display: flex; gap: calc(5px * var(--players-size)); overflow-x: auto; padding: calc(5px * var(--players-size)); background: rgba(255,255,255,0.05); flex-shrink: 0; min-height: 50px; }
-        .player { background: rgba(255,255,255,0.1); padding: calc(5px * var(--players-size)); min-width: calc(70px * var(--players-size)); text-align: center; font-size: calc(10px * var(--players-size)); white-space: nowrap; }
-        .player.active-turn { background: #51cf66; color: #000; font-weight: bold; }
-        .game-area { display: flex; flex-direction: column; gap: 5px; flex: 1; min-height: 0; overflow: hidden; }
-        .table { background: #0d5f1f; padding: 8px; text-align: center; display: flex; align-items: center; justify-content: center; gap: calc(5px * var(--table-size)); overflow-x: auto; overflow-y: hidden; flex-shrink: 0; height: var(--table-height); border: 1px solid #333; }
-        .card { width: calc(40px * var(--table-size)); height: calc(55px * var(--table-size)); background: #fff; border: 2px solid #333; border-radius: var(--card-radius); display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: calc(10px * var(--table-size)); flex-shrink: 0; }
-        .card.red { color: #d32f2f; }
-        .card.black { color: #000; }
-        #hand-container { background: rgba(255,255,255,0.05); padding: 8px; border: 1px solid #333; flex-shrink: 0; height: var(--hand-height); overflow-y: auto; display: block; min-height: 60px; }
-        #hand-title { font-weight: bold; margin-bottom: 5px; font-size: 11px; color: #ffeb3b; }
-        #cards-wrapper { display: flex; flex-wrap: wrap; gap: calc(5px * var(--hand-size)); }
-        .card-item { width: calc(40px * var(--hand-size)); height: calc(55px * var(--hand-size)); background: #fff; border: 2px solid #333; border-radius: var(--card-radius); display: flex; align-items: center; justify-content: center; cursor: pointer; font-weight: bold; font-size: calc(10px * var(--hand-size)); flex-shrink: 0; transition: all 0.2s; }
-        .card-item:hover { transform: translateY(-2px); }
-        .card-item.selected { background: #1a8c3a; color: #fff; border-color: #51cf66; box-shadow: 0 0 5px #51cf66; }
-        .card-item.red { color: #d32f2f; }
-        .card-item.black { color: #000; }
-        .log { background: #1a1a1a; padding: calc(6px * var(--log-size)); overflow-y: auto; font-family: monospace; font-size: calc(9px * var(--log-size)); color: #0f0; flex-shrink: 0; border: 1px solid #333; height: var(--log-height); }
-        .log-line { margin: 1px 0; }
-        .log-line.error { color: #ff4444; background: rgba(255,68,68,0.15); padding: 1px 3px; border-left: 2px solid #ff4444; }
-        .log-line.warning { color: #ffcc00; background: rgba(255,204,0,0.15); padding: 1px 3px; border-left: 2px solid #ffcc00; }
-        .controls { display: flex; gap: 5px; flex-shrink: 0; padding: 8px; background: #0a1f0f; border-top: 1px solid #333; }
-        .controls.sticky { position: sticky; bottom: 0; z-index: 50; }
-        .controls button { flex: 1; padding: calc(6px * var(--button-size)) calc(10px * var(--button-size)); font-size: calc(11px * var(--button-size)); }
-        .options-btn { position: fixed; top: 10px; right: 10px; width: 36px; height: 36px; background: #1a8c3a; color: #fff; border: none; border-radius: 50%; font-size: 16px; cursor: pointer; z-index: 100; }
-        .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); z-index: 999; align-items: center; justify-content: center; overflow-y: auto; }
-        .modal.active { display: flex; }
-        .modal-content { background: #1a2a1f; padding: 16px; border-radius: 8px; max-width: 450px; max-height: 90vh; overflow-y: auto; margin: auto; }
-        .modal-close { position: absolute; top: 8px; right: 8px; background: none; border: none; color: #fff; font-size: 22px; cursor: pointer; }
-        .version-info { background: rgba(255,235,59,0.1); padding: 8px; border-left: 3px solid #ffeb3b; margin: 8px 0; border-radius: 4px; font-size: 11px; }
-        .scale-group { margin: 12px 0; }
-        .scale-label { font-weight: bold; margin-bottom: 4px; font-size: 12px; }
-        .scale-row { display: flex; align-items: center; gap: 8px; margin: 6px 0; }
-        .scale-row label { min-width: 130px; font-size: 11px; }
-        .scale-row input { flex: 1; }
-        .scale-row span { min-width: 50px; text-align: right; color: #51cf66; font-family: monospace; font-size: 10px; }
-        .toggle { display: flex; align-items: center; gap: 8px; margin: 6px 0; }
-        .toggle-switch { position: relative; width: 44px; height: 22px; background: #444; border-radius: 11px; cursor: pointer; transition: 0.3s; flex-shrink: 0; }
-        .toggle-switch.active { background: #51cf66; }
-        .toggle-slider { position: absolute; top: 2px; left: 2px; width: 18px; height: 18px; background: white; border-radius: 50%; transition: 0.3s; }
-        .toggle-switch.active .toggle-slider { transform: translateX(22px); }
-        .swap-screen { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.9); z-index: 300; align-items: center; justify-content: center; flex-direction: column; gap: 16px; padding: 16px; overflow-y: auto; }
-        .swap-screen.active { display: flex; }
-        .swap-content { background: #1a3a1f; padding: 24px; border-radius: 12px; border: 3px solid #51cf66; max-width: 650px; }
-        .swap-title { font-size: 24px; color: #ffeb3b; font-weight: bold; text-align: center; margin-bottom: 16px; }
-        .swap-role { font-size: 18px; color: #51cf66; font-weight: bold; text-align: center; padding: 12px; background: rgba(81,207,102,0.2); border-radius: 8px; margin-bottom: 8px; }
-        .swap-instruction { font-size: 13px; color: #fff; text-align: center; background: rgba(81,207,102,0.2); padding: 12px; border-radius: 8px; margin-bottom: 12px; }
-        .swap-selected { font-size: 13px; color: #ffeb3b; text-align: center; margin-bottom: 12px; font-weight: bold; }
-        .swap-cards { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; justify-content: center; }
-        .swap-card { width: 54px; height: 72px; background: #fff; border: 3px solid #333; border-radius: 10px; display: flex; align-items: center; justify-content: center; cursor: pointer; font-weight: bold; font-size: 11px; transition: all 0.3s; }
-        .swap-card:hover { transform: scale(1.1); }
-        .swap-card.selected { background: #1a8c3a; border-color: #ffeb3b; color: #fff; box-shadow: 0 0 10px #ffeb3b; }
-        .swap-card.red { color: #d32f2f; }
-        .swap-card.black { color: #000; }
-        .swap-button { padding: 12px 36px; background: #ffeb3b; color: #000; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; }
-        .swap-button:hover { background: #fff59d; }
-        .swap-button:disabled { background: #aaa; cursor: not-allowed; }
-    </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>President v1.6.175 - Fixed 2s</title>
+<script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+<style>
+:root {
+  --hand-size: 3.7;
+  --table-size: 4.1;
+  --players-size: 2.0;
+  --card-radius: 11px;
+  --log-size: 1.2;
+  --button-size: 3.0;
+  --table-flex: 223;
+  --hand-flex: 480;
+  --log-flex: 99;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html, body {
+  width: 100%;
+  height: 100%;
+  font-family: Arial, sans-serif;
+  background: #0a1f0f;
+  color: #fff;
+  overflow: hidden;
+}
+
+.container {
+  width: 100vw;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 5px;
+}
+
+.setup {
+  background: #1a8c3a;
+  padding: 6px 5px;
+  border-radius: 4px;
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  align-items: center;
+  flex-shrink: 0;
+  overflow-x: auto;
+  min-height: 50px;
+  width: 100%;
+}
+
+input, select {
+  padding: 6px 7px;
+  border-radius: 3px;
+  border: 1px solid #ccc;
+  font-size: 11px;
+  min-width: 0;
+}
+
+button {
+  padding: 6px 8px;
+  background: #ffeb3b;
+  color: #000;
+  border: none;
+  border-radius: 3px;
+  cursor: pointer;
+  font-weight: bold;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.room-btn {
+  padding: 6px 7px;
+  background: #ffeb3b;
+  color: #000;
+  border: none;
+  border-radius: 3px;
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: bold;
+}
+
+.top-bar {
+  background: #1a8c3a;
+  padding: 4px;
+  text-align: center;
+  color: #ffeb3b;
+  font-size: 12px;
+  flex-shrink: 0;
+}
+
+.players {
+  display: flex;
+  gap: calc(5px * var(--players-size));
+  overflow-x: auto;
+  padding: calc(4px * var(--players-size));
+  background: rgba(255,255,255,0.05);
+  flex-shrink: 0;
+  min-height: calc(35px * var(--players-size));
+}
+
+.player {
+  background: rgba(255,255,255,0.1);
+  padding: calc(4px * var(--players-size));
+  min-width: calc(60px * var(--players-size));
+  text-align: center;
+  font-size: calc(10px * var(--players-size));
+  white-space: nowrap;
+  border-radius: calc(4px * var(--players-size));
+}
+
+.player.active-turn {
+  background: #51cf66;
+  color: #000;
+  font-weight: bold;
+}
+
+.game-area {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.table {
+  background: #0d5f1f;
+  padding: 10px;
+  text-align: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: calc(6px * var(--table-size));
+  overflow-x: auto;
+  overflow-y: hidden;
+  border: 1px solid #333;
+  flex-grow: var(--table-flex);
+  flex-shrink: 1;
+  flex-basis: 0;
+  min-height: 100px;
+}
+
+.card {
+  width: calc(40px * var(--table-size));
+  height: calc(55px * var(--table-size));
+  background: #fff;
+  border: 2px solid #333;
+  border-radius: var(--card-radius);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: bold;
+  font-size: calc(10px * var(--table-size));
+  flex-shrink: 0;
+}
+
+.card.red {
+  color: #d32f2f;
+}
+
+.card.black {
+  color: #000;
+}
+
+#hand-container {
+  background: rgba(255,255,255,0.05);
+  padding: 10px;
+  border: 1px solid #333;
+  overflow-y: auto;
+  display: block;
+  flex-grow: var(--hand-flex);
+  flex-shrink: 1;
+  flex-basis: 0;
+  min-height: 150px;
+}
+
+#hand-title {
+  font-weight: bold;
+  margin-bottom: 8px;
+  font-size: 13px;
+  color: #ffeb3b;
+}
+
+#cards-wrapper {
+  display: flex;
+  flex-wrap: wrap;
+  gap: calc(6px * var(--hand-size));
+}
+
+.card-item {
+  width: calc(40px * var(--hand-size));
+  height: calc(55px * var(--hand-size));
+  background: #fff;
+  border: 2px solid #333;
+  border-radius: var(--card-radius);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-weight: bold;
+  font-size: calc(10px * var(--hand-size));
+  flex-shrink: 0;
+  transition: all 0.2s;
+}
+
+.card-item:hover {
+  transform: translateY(-2px);
+}
+
+.card-item.selected {
+  background: #1a8c3a;
+  color: #fff;
+  border-color: #51cf66;
+  box-shadow: 0 0 5px #51cf66;
+}
+
+.card-item.red {
+  color: #d32f2f;
+}
+
+.card-item.black {
+  color: #000;
+}
+
+.log {
+  background: #1a1a1a;
+  padding: calc(5px * var(--log-size));
+  overflow-y: auto;
+  font-family: monospace;
+  font-size: calc(9px * var(--log-size));
+  color: #0f0;
+  border: 1px solid #333;
+  flex-grow: var(--log-flex);
+  flex-shrink: 1;
+  flex-basis: 0;
+  min-height: 60px;
+}
+
+.log-line {
+  margin: 1px 0;
+}
+
+.log-line.error {
+  color: #ff4444;
+  background: rgba(255,68,68,0.15);
+  padding: 1px 3px;
+  border-left: 2px solid #ff4444;
+}
+
+.log-line.warning {
+  color: #ffcc00;
+  background: rgba(255,204,0,0.15);
+  padding: 1px 3px;
+  border-left: 2px solid #ffcc00;
+}
+
+.controls {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+  padding: 10px;
+  background: #0a1f0f;
+  border-top: 1px solid #333;
+}
+
+.controls.sticky {
+  position: sticky;
+  bottom: 0;
+  z-index: 50;
+  background: #0a1f0f;
+  box-shadow: 0 -2px 10px rgba(0,0,0,0.5);
+}
+
+.controls button {
+  flex: 1;
+  padding: calc(8px * var(--button-size)) calc(12px * var(--button-size));
+  font-size: calc(12px * var(--button-size));
+}
+
+.options-btn {
+  position: fixed;
+  top: 10px;
+  right: 10px;
+  width: 36px;
+  height: 36px;
+  background: #1a8c3a;
+  color: #fff;
+  border: none;
+  border-radius: 50%;
+  font-size: 16px;
+  cursor: pointer;
+  z-index: 100;
+}
+
+.modal {
+  display: none;
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0,0,0,0.7);
+  z-index: 999;
+  align-items: center;
+  justify-content: center;
+  overflow-y: auto;
+}
+
+.modal.active {
+  display: flex;
+}
+
+.modal-content {
+  background: #1a2a1f;
+  padding: 16px;
+  border-radius: 8px;
+  max-width: 450px;
+  max-height: 90vh;
+  overflow-y: auto;
+  margin: auto;
+}
+
+.modal-close {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  background: none;
+  border: none;
+  color: #fff;
+  font-size: 22px;
+  cursor: pointer;
+}
+
+.version-info {
+  background: rgba(255,235,59,0.1);
+  padding: 8px;
+  border-left: 3px solid #ffeb3b;
+  margin: 8px 0;
+  border-radius: 4px;
+  font-size: 11px;
+}
+
+.scale-group {
+  margin: 12px 0;
+}
+
+.scale-label {
+  font-weight: bold;
+  margin-bottom: 4px;
+  font-size: 12px;
+}
+
+.scale-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 6px 0;
+}
+
+.scale-row label {
+  min-width: 130px;
+  font-size: 11px;
+}
+
+.scale-row input {
+  flex: 1;
+}
+
+.scale-row span {
+  min-width: 50px;
+  text-align: right;
+  color: #51cf66;
+  font-family: monospace;
+  font-size: 10px;
+}
+
+.toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 6px 0;
+}
+
+.toggle-switch {
+  position: relative;
+  width: 44px;
+  height: 22px;
+  background: #444;
+  border-radius: 11px;
+  cursor: pointer;
+  transition: 0.3s;
+  flex-shrink: 0;
+}
+
+.toggle-switch.active {
+  background: #51cf66;
+}
+
+.toggle-slider {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 18px;
+  height: 18px;
+  background: white;
+  border-radius: 50%;
+  transition: 0.3s;
+}
+
+.toggle-switch.active .toggle-slider {
+  transform: translateX(22px);
+}
+
+.swap-screen {
+  display: none;
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0,0,0,0.9);
+  z-index: 300;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 16px;
+  padding: 16px;
+  overflow-y: auto;
+}
+
+.swap-screen.active {
+  display: flex;
+}
+
+.swap-content {
+  background: #1a3a1f;
+  padding: 24px;
+  border-radius: 12px;
+  border: 3px solid #51cf66;
+  max-width: 650px;
+}
+
+.swap-title {
+  font-size: 24px;
+  color: #ffeb3b;
+  font-weight: bold;
+  text-align: center;
+  margin-bottom: 16px;
+}
+
+.swap-role {
+  font-size: 18px;
+  color: #51cf66;
+  font-weight: bold;
+  text-align: center;
+  padding: 12px;
+  background: rgba(81,207,102,0.2);
+  border-radius: 8px;
+  margin-bottom: 8px;
+}
+
+.swap-instruction {
+  font-size: 13px;
+  color: #fff;
+  text-align: center;
+  background: rgba(81,207,102,0.2);
+  padding: 12px;
+  border-radius: 8px;
+  margin-bottom: 12px;
+}
+
+.swap-selected {
+  font-size: 13px;
+  color: #ffeb3b;
+  text-align: center;
+  margin-bottom: 12px;
+  font-weight: bold;
+}
+
+.swap-cards {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 16px;
+  justify-content: center;
+}
+
+.swap-card {
+  width: 54px;
+  height: 72px;
+  background: #fff;
+  border: 3px solid #333;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-weight: bold;
+  font-size: 11px;
+  transition: all 0.3s;
+}
+
+.swap-card:hover {
+  transform: scale(1.1);
+}
+
+.swap-card.selected {
+  background: #1a8c3a;
+  border-color: #ffeb3b;
+  color: #fff;
+  box-shadow: 0 0 10px #ffeb3b;
+}
+
+.swap-card.red {
+  color: #d32f2f;
+}
+
+.swap-card.black {
+  color: #000;
+}
+
+.swap-button {
+  padding: 12px 36px;
+  background: #ffeb3b;
+  color: #000;
+  border: none;
+  border-radius: 8px;
+  font-weight: bold;
+  cursor: pointer;
+}
+
+.swap-button:hover {
+  background: #fff59d;
+}
+
+.swap-button:disabled {
+  background: #aaa;
+  cursor: not-allowed;
+}
+</style>
 </head>
 <body>
+
 <button class="options-btn" id="optionsBtn">⚙️</button>
-<div class="swap-screen" id="swapScreen"><div class="swap-content"><div class="swap-title">🎭 Card Exchange</div><div class="swap-role" id="swapRole"></div><div class="swap-instruction" id="swapInstruction"></div><div class="swap-selected" id="swapSelected"></div><div style="font-weight: bold; color: #ffeb3b; margin-bottom: 8px;">Select Cards:</div><div class="swap-cards" id="swapCards"></div><button class="swap-button" onclick="submitCardExchange()" id="submitBtn">Submit Exchange</button></div></div>
-<div class="modal" id="optionsModal"><div class="modal-content"><button class="modal-close" onclick="closeOptions()">×</button><h2 style="margin-bottom: 8px; font-size: 16px;">⚙️ Settings</h2><div class="version-info">🎮 President v1.6.141 - Turn Notification Only</div><div style="border-bottom: 2px solid #51cf66; padding-bottom: 10px; margin-bottom: 10px;"><div style="font-weight: bold; color: #ffeb3b; margin-bottom: 10px; font-size: 13px;">🎯 PRIMARY SETTINGS</div><div class="toggle"><label>🔊 Sound Effects</label><div class="toggle-switch" id="soundToggle"><div class="toggle-slider"></div></div></div><div class="toggle"><label style="color: #51cf66;">🔔 Turn Notification Only</label><div class="toggle-switch" id="turnNotificationToggle"><div class="toggle-slider"></div></div></div><div style="background: rgba(81,207,102,0.15); padding: 8px; border-radius: 4px; margin-top: 6px; border-left: 3px solid #51cf66; font-size: 10px; color: #51cf66;">Only play sound when it's your turn (mutes all other sounds)</div><div class="scale-row"><label>Volume</label><input type="range" id="soundVolume" min="0" max="100" step="5" value="50"><span id="soundVolumeVal">50%</span></div><div class="toggle" style="margin-top: 10px;"><label style="font-weight: bold; color: #ffeb3b;">📌 STICKY BUTTONS</label><div class="toggle-switch" id="stickyButtonsToggle"><div class="toggle-slider"></div></div></div><div style="background: rgba(255,235,59,0.15); padding: 8px; border-radius: 4px; margin-top: 6px; border-left: 3px solid #ffeb3b; font-size: 10px; color: #ffeb3b;">Keep controls visible at bottom when scrolling</div></div><div style="border-bottom: 1px solid #333; padding-bottom: 10px; margin-bottom: 10px;"><div class="scale-group"><div class="scale-label">⚡ CPU Turn Speed</div><div class="scale-row"><label>Speed</label><input type="range" id="cpuSpeed" min="0.3" max="2.0" step="0.1" value="1.0"><span id="cpuSpeedVal">1.0x</span></div></div></div><div style="border-bottom: 1px solid #333; padding-bottom: 10px; margin-bottom: 10px;"><div class="toggle"><label>🔄 Auto-Scale</label><div class="toggle-switch" id="autoScaleToggle"><div class="toggle-slider"></div></div></div></div><div style="border-bottom: 1px solid #333; padding-bottom: 10px; margin-bottom: 10px;"><div class="scale-group"><div class="scale-label">📏 AREA HEIGHTS (EXTENDED)</div><div class="scale-row"><label>Table Height</label><input type="range" id="tableHeight" min="30" max="400" step="10" value="80"><span id="tableHeightVal">80px</span></div><div class="scale-row"><label>Hand Height</label><input type="range" id="handHeight" min="60" max="600" step="10" value="150"><span id="handHeightVal">150px</span></div><div class="scale-row"><label>Log Height</label><input type="range" id="logHeight" min="40" max="300" step="10" value="120"><span id="logHeightVal">120px</span></div></div><div class="scale-group"><div class="scale-label">🎴 CARD SIZES (EXTENDED)</div><div class="scale-row"><label>Hand Cards</label><input type="range" id="handSize" min="0.4" max="8.0" step="0.2" value="4.0"><span id="handSizeVal">4.0x</span></div><div class="scale-row"><label>Table Cards</label><input type="range" id="tableSize" min="0.4" max="8.0" step="0.2" value="4.0"><span id="tableSizeVal">4.0x</span></div></div><div class="scale-group"><div class="scale-label">📊 TEXT SIZES</div><div class="scale-row"><label>Players Track</label><input type="range" id="playersSize" min="0.6" max="2.0" step="0.2" value="2.0"><span id="playersSizeVal">2.0x</span></div><div class="scale-row"><label>Log Text</label><input type="range" id="logSize" min="0.7" max="1.8" step="0.2" value="1.8"><span id="logSizeVal">1.8x</span></div><div class="scale-row"><label>Buttons</label><input type="range" id="buttonSize" min="0.7" max="2.0" step="0.2" value="2.0"><span id="buttonSizeVal">2.0x</span></div><div class="scale-row"><label>Card Corners</label><input type="range" id="cardRadius" min="2" max="20" step="1" value="20"><span id="cardRadiusVal">20px</span></div></div></div></div></div>
-<div class="container"><div class="setup"><input type="text" id="playerName" placeholder="Name" value="Player" style="width: 60px;"><select id="numPlayers" style="width: 45px;"><option value="2">2P</option><option value="3">3P</option><option value="4" selected>4P</option><option value="5">5P</option><option value="6">6P</option><option value="7">7P</option><option value="8">8P</option></select><select id="numCPU" style="width: 40px;"><option value="0">0</option><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="5">5</option><option value="6">6</option><option value="7">7</option></select><button onclick="createGame()" style="width: 55px;">CREATE</button><button class="room-btn" id="roomDisplay" style="display:none; width: 50px;" title="Click to copy room link" onclick="copyRoomURL()">📋</button><input type="text" id="joinCode" placeholder="Code" value="" style="width: 55px;"><button onclick="joinGame()" style="width: 45px;">JOIN</button><button onclick="startGame()" id="startBtn" style="display:none; width: 50px;">▶️</button></div><div class="top-bar" id="turn">Waiting...</div><div class="players" id="players"></div><div class="game-area"><div class="table" id="table">Table (empty)</div><div id="hand-container"><div id="hand-title">Your Hand</div><div id="cards-wrapper"></div></div><div class="log" id="log"></div></div><div class="controls" id="controls"><button onclick="playCards()">PLAY</button><button onclick="clearSelection()">CLEAR</button><button onclick="passTurn()">PASS</button></div></div>
-<script>
-let socket,myId,room,selected=new Set(),myHand=[],swapSelected=new Set();
-let soundEnabled=localStorage.getItem('soundEnabled')!=='false';
-let soundVolume=parseInt(localStorage.getItem('soundVolume')||'50')/100;
-let stickyButtons=localStorage.getItem('stickyButtons')!=='false';
-let autoScale=localStorage.getItem('autoScale')==='true';
-let cpuSpeed=parseFloat(localStorage.getItem('cpuSpeed')||'1.0');
-let turnNotificationOnly=localStorage.getItem('turnNotificationOnly')==='true';
-let lastPlayerId=null,heartbeatTimeout;
-const suits={H:'♥',D:'♦',C:'♣',S:'♠'};
 
-// SOUND SYSTEM - v1.6.141 with Turn Notification Only
-let audioContext = null;
+<div class="swap-screen" id="swapScreen">
+  <div class="swap-content">
+    <div class="swap-title">🎭 Card Exchange</div>
+    <div class="swap-role" id="swapRole"></div>
+    <div class="swap-instruction" id="swapInstruction"></div>
+    <div class="swap-selected" id="swapSelected"></div>
+    <div style="font-weight: bold; color: #ffeb3b; margin-bottom: 8px;">Select Cards:</div>
+    <div class="swap-cards" id="swapCards"></div>
+    <button class="swap-button" onclick="submitCardExchange()" id="submitBtn">Submit Exchange</button>
+  </div>
+</div>
 
-function initAudio() {
-    if (!audioContext) {
-        audioContext = new (window.AudioContext || window.webkitAudioContext)();
-        if (audioContext.state === 'suspended') {
-            audioContext.resume();
-        }
-    }
-    return audioContext;
-}
+<div class="modal" id="optionsModal">
+  <div class="modal-content">
+    <button class="modal-close" onclick="closeOptions()">×</button>
+    <h2 style="margin-bottom: 8px; font-size: 16px;">⚙️ Settings</h2>
+    <div class="version-info">
+      🎮 President v1.6.175<br>
+      ✅ FIXED: 2s bombing now works!<br>
+      ✅ Pairs of 2s beat pairs ✨
+    </div>
 
-function playSound(type) {
-    if (!soundEnabled) return;
+    <div style="border-bottom: 2px solid #51cf66; padding-bottom: 10px; margin-bottom: 10px;">
+      <div style="font-weight: bold; color: #ffeb3b; margin-bottom: 10px; font-size: 13px;">🎯 PRIMARY SETTINGS</div>
 
-    // NEW: Turn Notification Only mode
-    if (turnNotificationOnly && type !== 'turn') {
-        return; // Silence all sounds except 'turn'
-    }
+      <div class="toggle">
+        <label>🔊 Sound Effects</label>
+        <div class="toggle-switch" id="soundToggle">
+          <div class="toggle-slider"></div>
+        </div>
+      </div>
 
-    try {
-        const ctx = initAudio();
-        const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
-        osc.connect(gain);
-        gain.connect(ctx.destination);
-        const now = ctx.currentTime;
-        gain.gain.setValueAtTime(soundVolume * 0.3, now);
-        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.2);
+      <div class="toggle">
+        <label style="color: #51cf66;">🔔 Turn Notification Only</label>
+        <div class="toggle-switch" id="turnNotificationToggle">
+          <div class="toggle-slider"></div>
+        </div>
+      </div>
 
-        switch(type) {
-            case 'click': osc.frequency.setValueAtTime(800, now); break;
-            case 'play': osc.frequency.setValueAtTime(600, now); osc.frequency.exponentialRampToValueAtTime(1200, now + 0.2); break;
-            case 'pass': osc.frequency.setValueAtTime(400, now); break;
-            case 'turn': osc.frequency.setValueAtTime(1000, now); break;
-            case 'error': osc.frequency.setValueAtTime(200, now); osc.frequency.exponentialRampToValueAtTime(100, now + 0.2); break;
-        }
+      <div class="scale-row">
+        <label>Volume</label>
+        <input type="range" id="soundVolume" min="0" max="100" step="5" value="50">
+        <span id="soundVolumeVal">50%</span>
+      </div>
 
-        osc.start(now);
-        const stopTime = type === 'click' ? now + 0.1 : type === 'pass' ? now + 0.15 : type === 'turn' ? now + 0.25 : now + 0.2;
-        osc.stop(stopTime);
-    } catch(e) { console.error('❌ Sound error:', e); }
-}
+      <div class="toggle" style="margin-top: 10px;">
+        <label style="font-weight: bold; color: #ffeb3b;">📌 STICKY BUTTONS</label>
+        <div class="toggle-switch" id="stickyButtonsToggle">
+          <div class="toggle-slider"></div>
+        </div>
+      </div>
+    </div>
 
-document.addEventListener('click', function() { try { initAudio(); } catch(e) {} }, { once: true });
+    <div style="border-bottom: 1px solid #333; padding-bottom: 10px; margin-bottom: 10px;">
+      <div class="scale-group">
+        <div class="scale-label">⚡ CPU Turn Speed</div>
+        <div class="scale-row">
+          <label>Speed</label>
+          <input type="range" id="cpuSpeed" min="0.3" max="2.0" step="0.1" value="1.2">
+          <span id="cpuSpeedVal">1.2x</span>
+        </div>
+      </div>
+    </div>
 
-function initializeFromURL(){const params=new URLSearchParams(window.location.search),roomCode=params.get('room');if(roomCode)document.getElementById('joinCode').value=roomCode.toUpperCase();}
-function applyStickyButtons(){const controls=document.getElementById('controls');if(stickyButtons)controls.classList.add('sticky');else controls.classList.remove('sticky');}
-function log(msg,isError=false,isWarning=false){const logEl=document.getElementById('log'),line=document.createElement('div');line.className='log-line'+(isError?' error':'')+(isWarning?' warning':'');const time=new Date().toLocaleTimeString().substring(0,8);line.textContent='['+time+'] '+msg;logEl.appendChild(line);logEl.scrollTop=logEl.scrollHeight;while(logEl.children.length>100)logEl.removeChild(logEl.firstChild);}
-function applyAutoScale(){if(autoScale){document.getElementById('tableHeight').value='50';document.getElementById('handHeight').value='100';document.getElementById('logHeight').value='80';document.getElementById('tableSize').value='2.5';document.getElementById('handSize').value='2.5';updateHeights();log('📐 Auto-scale');}else{document.getElementById('tableHeight').value='80';document.getElementById('handHeight').value='150';document.getElementById('logHeight').value='120';document.getElementById('tableSize').value='4.0';document.getElementById('handSize').value='4.0';updateHeights();log('📐 Default scale');}}
-function updateHeights(){document.documentElement.style.setProperty('--table-height',document.getElementById('tableHeight').value+'px');document.documentElement.style.setProperty('--hand-height',document.getElementById('handHeight').value+'px');document.documentElement.style.setProperty('--log-height',document.getElementById('logHeight').value+'px');document.documentElement.style.setProperty('--hand-size',document.getElementById('handSize').value);document.documentElement.style.setProperty('--table-size',document.getElementById('tableSize').value);document.documentElement.style.setProperty('--players-size',document.getElementById('playersSize').value);document.documentElement.style.setProperty('--log-size',document.getElementById('logSize').value);document.documentElement.style.setProperty('--button-size',document.getElementById('buttonSize').value);document.documentElement.style.setProperty('--card-radius',document.getElementById('cardRadius').value+'px');document.getElementById('tableHeightVal').textContent=document.getElementById('tableHeight').value+'px';document.getElementById('handHeightVal').textContent=document.getElementById('handHeight').value+'px';document.getElementById('logHeightVal').textContent=document.getElementById('logHeight').value+'px';document.getElementById('tableSizeVal').textContent=parseFloat(document.getElementById('tableSize').value).toFixed(1)+'x';document.getElementById('handSizeVal').textContent=parseFloat(document.getElementById('handSize').value).toFixed(1)+'x';document.getElementById('playersSizeVal').textContent=parseFloat(document.getElementById('playersSize').value).toFixed(1)+'x';document.getElementById('logSizeVal').textContent=parseFloat(document.getElementById('logSize').value).toFixed(1)+'x';document.getElementById('buttonSizeVal').textContent=parseFloat(document.getElementById('buttonSize').value).toFixed(1)+'x';document.getElementById('cardRadiusVal').textContent=document.getElementById('cardRadius').value+'px';}
-document.getElementById('tableHeight').oninput=updateHeights;document.getElementById('handHeight').oninput=updateHeights;document.getElementById('logHeight').oninput=updateHeights;document.getElementById('tableSize').oninput=function(){updateHeights();renderTable();};document.getElementById('handSize').oninput=function(){updateHeights();renderHand();};document.getElementById('playersSize').oninput=updateHeights;document.getElementById('logSize').oninput=updateHeights;document.getElementById('buttonSize').oninput=updateHeights;document.getElementById('cardRadius').oninput=updateHeights;
+    <div style="border-bottom: 1px solid #333; padding-bottom: 10px; margin-bottom: 10px;">
+      <div class="toggle">
+        <label style="font-weight: bold; color: #51cf66;">🔄 AUTO-SCALE (Dynamic)</label>
+        <div class="toggle-switch" id="autoScaleToggle">
+          <div class="toggle-slider"></div>
+        </div>
+      </div>
+      <div style="font-size: 10px; color: #888; padding: 4px 0; line-height: 1.3;">
+        Areas expand to fill ALL space. Proportions controlled by sliders.
+      </div>
+    </div>
 
-const soundToggle=document.getElementById('soundToggle');
-if(soundEnabled)soundToggle.classList.add('active');
-soundToggle.onclick=function(){soundEnabled=!soundEnabled;this.classList.toggle('active');localStorage.setItem('soundEnabled',soundEnabled);playSound('click');};
+    <div style="border-bottom: 1px solid #333; padding-bottom: 10px; margin-bottom: 10px;">
+      <div class="toggle">
+        <label style="font-weight: bold; color: #ffeb3b;">📐 AUTO CARD SIZE</label>
+        <div class="toggle-switch active" id="autoCardSizeToggle">
+          <div class="toggle-slider"></div>
+        </div>
+      </div>
+      <div style="font-size: 10px; color: #888; padding: 4px 0; line-height: 1.3;">
+        Cards automatically scale to fit available space.
+      </div>
+    </div>
 
-const turnNotificationToggle=document.getElementById('turnNotificationToggle');
-if(turnNotificationOnly)turnNotificationToggle.classList.add('active');
-turnNotificationToggle.onclick=function(){
-    turnNotificationOnly=!turnNotificationOnly;
-    this.classList.toggle('active');
-    localStorage.setItem('turnNotificationOnly',turnNotificationOnly);
-    if(turnNotificationOnly){log('🔔 Turn notification only');}else{log('🔊 All sounds enabled');}
-    playSound('click');
-};
+    <div style="border-bottom: 1px solid #333; padding-bottom: 10px; margin-bottom: 10px;">
+      <div class="scale-group">
+        <div class="scale-label">📏 AREA PROPORTIONS</div>
+        <div class="scale-row">
+          <label>Table Proportion</label>
+          <input type="range" id="tableFlex" min="50" max="800" step="10" value="223">
+          <span id="tableFlexVal">223</span>
+        </div>
+        <div class="scale-row">
+          <label>Hand Proportion</label>
+          <input type="range" id="handFlex" min="100" max="1000" step="10" value="480">
+          <span id="handFlexVal">480</span>
+        </div>
+        <div class="scale-row">
+          <label>Log Proportion</label>
+          <input type="range" id="logFlex" min="40" max="400" step="10" value="99">
+          <span id="logFlexVal">99</span>
+        </div>
+      </div>
 
-const stickyButtonsToggle=document.getElementById('stickyButtonsToggle');if(stickyButtons)stickyButtonsToggle.classList.add('active');stickyButtonsToggle.onclick=function(){stickyButtons=!stickyButtons;this.classList.toggle('active');localStorage.setItem('stickyButtons',stickyButtons);applyStickyButtons();playSound('click');};
-const soundVolumeSlider=document.getElementById('soundVolume');soundVolumeSlider.value=soundVolume*100;document.getElementById('soundVolumeVal').textContent=Math.round(soundVolume*100)+'%';soundVolumeSlider.oninput=function(){soundVolume=parseInt(this.value)/100;document.getElementById('soundVolumeVal').textContent=this.value+'%';localStorage.setItem('soundVolume',this.value);};
-const autoScaleToggle=document.getElementById('autoScaleToggle');if(autoScale)autoScaleToggle.classList.add('active');autoScaleToggle.onclick=function(){autoScale=!autoScale;this.classList.toggle('active');localStorage.setItem('autoScale',autoScale);applyAutoScale();playSound('click');};
-const cpuSpeedSlider=document.getElementById('cpuSpeed');cpuSpeedSlider.value=cpuSpeed;document.getElementById('cpuSpeedVal').textContent=cpuSpeed.toFixed(1)+'x';cpuSpeedSlider.oninput=function(){cpuSpeed=parseFloat(this.value);document.getElementById('cpuSpeedVal').textContent=cpuSpeed.toFixed(1)+'x';localStorage.setItem('cpuSpeed',cpuSpeed);if(socket)socket.emit('update-cpu-speed',{cpuSpeed});};
-document.getElementById('optionsBtn').onclick=()=>{document.getElementById('optionsModal').classList.add('active');playSound('click');};function closeOptions(){document.getElementById('optionsModal').classList.remove('active');}document.getElementById('optionsModal').onclick=function(e){if(e.target===this)closeOptions();};
-function resetHeartbeatTimeout(){clearTimeout(heartbeatTimeout);heartbeatTimeout=setTimeout(()=>{if(!socket.connected){log('🔌 Reconnecting...',false,true);socket.connect();}},15000);}
-function getSuitColor(suit){return(suit==='H'||suit==='D')?'red':'black';}
-function renderHand(){const wrapper=document.getElementById('cards-wrapper');wrapper.innerHTML='';if(!myHand||myHand.length===0){wrapper.innerHTML='<div style="color: #888; font-size: 10px; padding: 4px;">Waiting for cards...</div>';return;}myHand.forEach((card,i)=>{const div=document.createElement('div'),color=getSuitColor(card.suit);div.className='card-item '+(color==='red'?'red':'black')+(selected.has(i)?' selected':'');div.textContent=card.rank+(suits[card.suit]||card.suit);div.onclick=()=>{if(selected.has(i))selected.delete(i);else selected.add(i);renderHand();playSound('click');};wrapper.appendChild(div);});}
-function renderTable(tableCards=[]){const el=document.getElementById('table');if(!tableCards||tableCards.length===0){el.innerHTML='Table (empty)';return;}el.innerHTML='';tableCards.forEach(card=>{const div=document.createElement('div'),color=getSuitColor(card.suit);div.className='card '+(color==='red'?'red':'black');div.textContent=card.rank+(suits[card.suit]||card.suit);el.appendChild(div);});}
-function renderPlayers(players,currentPlayerId){const el=document.getElementById('players');el.innerHTML='';if(players)players.forEach(p=>{const div=document.createElement('div');div.className='player'+(p.id===currentPlayerId?' active-turn':'');div.innerHTML='<div><b>'+p.name+'</b></div><div>'+(p.handSize||0)+'</div>';el.appendChild(div);});}
-function showSwapPhase(players){log('🎭 Card exchange');playSound('turn');const p=players.find(x=>x.id===myId);if(!p){log('ERROR',true);playSound('error');return;}myHand=p.hand||[];const role=p.role||'Neutral';document.getElementById('swapRole').textContent='👑 '+role;let instruction='',required=0;if(role==='President'){instruction='👑 Select 2 worst';required=2;}else if(role==='Vice President'){instruction='↓ Select 1 worst';required=1;}else if(role==='Asshole'){instruction='↑ Select 2 best';required=2;}else if(role==='Vice Asshole'){instruction='↑ Select 1 best';required=1;}else{instruction='Waiting...';required=0;}document.getElementById('swapInstruction').textContent=instruction;if(required===0){setTimeout(()=>{document.getElementById('swapScreen').classList.remove('active');socket.emit('submit-card-exchange',{roomCode:room,cardIndices:[]});},2000);document.getElementById('swapScreen').classList.add('active');return;}swapSelected.clear();const swapCards=document.getElementById('swapCards');swapCards.innerHTML='';myHand.forEach((card,i)=>{const div=document.createElement('div'),color=getSuitColor(card.suit);div.className='swap-card '+(color==='red'?'red':'black');div.textContent=card.rank+(suits[card.suit]||card.suit);div.onclick=()=>{if(swapSelected.has(i))swapSelected.delete(i);else swapSelected.add(i);updateSwapDisplay(required);playSound('click');};swapCards.appendChild(div);});updateSwapDisplay(required);document.getElementById('swapScreen').classList.add('active');}
-function updateSwapDisplay(required){const selectedCount=swapSelected.size;document.getElementById('swapSelected').textContent=`${selectedCount}/${required}`;document.getElementById('submitBtn').disabled=selectedCount!==required;document.querySelectorAll('.swap-card').forEach((card,i)=>{card.classList.toggle('selected',swapSelected.has(i));});}
-function createGame(){socket.emit('create-game',{playerName:document.getElementById('playerName').value||'Player',options:{num_players:parseInt(document.getElementById('numPlayers').value),numCPU:parseInt(document.getElementById('numCPU').value),cpuSpeed}});playSound('play');}
-function copyRoomURL(){navigator.clipboard.writeText(window.location.href.split('?')[0]+'?room='+room);alert('Room link copied!');playSound('click');}
-function joinGame(){const code=document.getElementById('joinCode').value.toUpperCase().trim();if(!code)return;socket.emit('join-game',{roomCode:code,playerName:document.getElementById('playerName').value||'Player'});playSound('play');}
-function startGame(){socket.emit('start-game',{roomCode:room});playSound('play');}
-function playCards(){if(selected.size===0)return;socket.emit('play-cards',{roomCode:room,cardIndices:Array.from(selected)});selected.clear();playSound('play');}
-function clearSelection(){selected.clear();renderHand();playSound('click');}
-function passTurn(){socket.emit('pass-turn',{roomCode:room});playSound('pass');}
-function submitCardExchange(){socket.emit('submit-card-exchange',{roomCode:room,cardIndices:Array.from(swapSelected)});document.getElementById('swapScreen').classList.remove('active');playSound('play');}
-socket=io({transports:['websocket','polling'],reconnection:true,reconnectionDelay:500,reconnectionDelayMax:1000,reconnectionAttempts:Infinity,pingTimeout:30000,pingInterval:5000,});
-socket.on('connect',()=>{myId=socket.id;log('✅ Connected');resetHeartbeatTimeout();initializeFromURL();applyStickyButtons();applyAutoScale();});
-socket.on('heartbeat',(data)=>{resetHeartbeatTimeout();socket.emit('heartbeat-response',{timestamp:data.timestamp});});
-socket.on('game-created',(data)=>{room=data.roomCode;log('Game: '+room);window.history.replaceState({},'',window.location.href.split('?')[0]+'?room='+room);document.getElementById('roomDisplay').style.display='block';document.getElementById('startBtn').style.display='block';document.getElementById('joinCode').value=room;});
-socket.on('game-state-update',(state)=>{document.getElementById('turn').textContent=state.currentPlayerName+' turn';renderPlayers(state.players,state.currentPlayerId);renderTable(state.lastPlay?.cards);if(state.currentPlayerId===myId&&lastPlayerId!==myId){log('🔔 Your turn!');playSound('turn');}lastPlayerId=state.currentPlayerId;const p=state.players.find(x=>x.id===myId);if(p&&p.hand&&Array.isArray(p.hand)){myHand=p.hand;renderHand();log('📋 Hand: '+myHand.length+' cards');}});
-socket.on('round-end',(data)=>showSwapPhase(data.players));
-socket.on('card-played',(data)=>{let cardsText='';if(data.cards&&data.cards.length>0){cardsText=data.cards.map(c=>c.rank+suits[c.suit]).join(' ');log('▶ '+data.playerName+' played: '+cardsText);}else{log('▶ '+data.playerName+' played cards');}playSound('play');});
-socket.on('player-passed',(data)=>{log('⏸ '+data.playerName+' passed');playSound('pass');});
-socket.on('invalid-play',(data)=>{log('❌ '+(data.reason||'Invalid play'),true);playSound('error');});
-socket.on('game-started',()=>{log('🎮 Game started!');playSound('play');document.getElementById('roomDisplay').style.display='none';document.getElementById('startBtn').style.display='none';});
-socket.on('error',(msg)=>{log('ERROR: '+msg.message,true);playSound('error');});
-window.addEventListener('load',initializeFromURL);
+      <div class="scale-group">
+        <div class="scale-label">🎴 CARD SIZES</div>
+        <div class="scale-row">
+          <label>Hand Cards</label>
+          <input type="range" id="handSize" min="1.0" max="10.0" step="0.1" value="3.7">
+          <span id="handSizeVal">3.7x</span>
+        </div>
+        <div class="scale-row">
+          <label>Table Cards</label>
+          <input type="range" id="tableSize" min="1.0" max="10.0" step="0.1" value="4.1">
+          <span id="tableSizeVal">4.1x</span>
+        </div>
+      </div>
 
-window.testSound = function() {
-    console.log('🧪 Testing sound...');
-    console.log('Enabled:', soundEnabled);
-    console.log('Turn Only:', turnNotificationOnly);
-    console.log('Volume:', soundVolume);
-    console.log('AudioContext:', audioContext ? audioContext.state : 'not created');
-    playSound('click');
-};
-console.log('💡 Type testSound() to test audio');
-console.log('🔔 v1.6.141 - Turn Notification Only mode available');
-</script>
+      <div class="scale-group">
+        <div class="scale-label">📊 TEXT SIZES</div>
+        <div class="scale-row">
+          <label>Players Track</label>
+          <input type="range" id="playersSize" min="0.5" max="4.0" step="0.1" value="2.0">
+          <span id="playersSizeVal">2.0x</span>
+        </div>
+        <div class="scale-row">
+          <label>Log Text</label>
+          <input type="range" id="logSize" min="0.7" max="2.0" step="0.1" value="1.2">
+          <span id="logSizeVal">1.2x</span>
+        </div>
+        <div class="scale-row">
+          <label>Buttons</label>
+          <input type="range" id="buttonSize" min="1.0" max="5.0" step="0.1" value="3.0">
+          <span id="buttonSizeVal">3.0x</span>
+        </div>
+        <div class="scale-row">
+          <label>Card Corners</label>
+          <input type="range" id="cardRadius" min="2" max="30" step="1" value="11">
+          <span id="cardRadiusVal">11px</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="container">
+  <div class="setup">
+    <input type="text" id="playerName" placeholder="Name" value="Player" style="width: 60px;">
+    <select id="numPlayers" style="width: 60px;">
+      <option value="2">2P</option>
+      <option value="3">3P</option>
+      <option value="4" selected>4P</option>
+      <option value="5">5P</option>
+      <option value="6">6P</option>
+      <option value="7">7P</option>
+      <option value="8">8P</option>
+    </select>
+    <select id="numCPU" style="width: 55px;">
+      <option value="0">0</option>
+      <option value="1">1</option>
+      <option value="2">2</option>
+      <option value="3">3</option>
+      <option value="4">4</option>
+      <option value="5">5</option>
+      <option value="6">6</option>
+      <option value="7">7</option>
+    </select>
+    <button onclick="createGame()" style="width: 55px;">CREATE</button>
+    <button class="room-btn" id="roomDisplay" style="display:none; width: 65px;" title="Click to copy room link" onclick="copyRoomURL()">📋</button>
+    <input type="text" id="joinCode" placeholder="Code" value="" style="width: 55px;">
+    <button onclick="joinGame()" style="width: 45px;">JOIN</button>
+    <button onclick="startGame()" id="startBtn" style="display:none; width: 50px;">▶️</button>
+  </div>
+
+  <div class="top-bar" id="turn">Waiting...</div>
+
+  <div class="players" id="players"></div>
+
+  <div class="game-area">
+    <div class="table" id="table">Table (empty)</div>
+
+    <div id="hand-container">
+      <div id="hand-title">Your Hand</div>
+      <div id="cards-wrapper"></div>
+    </div>
+
+    <div class="log" id="log"></div>
+  </div>
+
+  <div class="controls" id="controls">
+    <button onclick="playCards()">PLAY</button>
+    <button onclick="clearSelection()">CLEAR</button>
+    <button onclick="passTurn()">PASS</button>
+  </div>
+</div>
+
+<script src="game.js"></script>
 </body>
 </html>

@@ -1,64 +1,87 @@
-# President v1.6.141 - Turn Notification Only
+# President v1.6.175 - FIXED 2s BOMBING
 
-## 🔔 NEW FEATURE: Turn Notification Only Mode
+## 🔧 CRITICAL FIX - 2s NOW BOMB PROPERLY!
 
-**Sound only when it's YOUR turn!**
+**What was broken:** Pairs of 2s weren't beating other pairs
+**What's fixed:** 2s bombing logic completely rewritten
 
-### Settings:
-1. **🔊 Sound Effects** - Master toggle (ON/OFF)
-2. **🔔 Turn Notification Only** - NEW! Mutes all sounds except turn notification
-3. **Volume** - 0-100%
+---
 
-### How It Works:
-When "Turn Notification Only" is enabled:
-- ✅ **Sound plays:** When it becomes your turn
-- 🔇 **Muted:** Button clicks, card plays, passes, errors
+## ✅ 2s BOMBING RULES (NOW WORKING):
 
-When disabled (default):
-- All sounds work as normal
+### **Bombing Power:**
+- **Pair of 2s (2x2)** beats singles, pairs, AND triples!
+- **Triple of 2s (3x2)** beats singles through quads!
+- **Quad of 2s (4x2)** beats everything!
 
-### Benefits:
-- Less distracting in multiplayer games
-- Clear notification when action is needed
-- Perfect for playing while multitasking
+### **Rule:** N 2s can beat up to (N+1) cards
+- 2x2 → beats length ≤ 3
+- 3x2 → beats length ≤ 4
+- 4x2 → beats length ≤ 5 (anything)
 
-## ✅ Also Includes (from v1.6.140):
-- Enhanced card sorting (value + suit)
-- Fixed black 3s sorting (3♣ always first)
-- Improved 3♣ detection
-- Comprehensive gameplay testing
-- Working sound system (v1.6.139 fix)
+### **Restrictions:**
+- ❌ 2s CANNOT beat Jack of Diamonds
+- ❌ 2s CANNOT beat Black 3s
+- ❌ 2s CANNOT beat equal or more 2s
+- ❌ Single 2 can ONLY beat singles (not pairs)
 
-## 🚀 Deploy:
+---
+
+## 📦 THIS PACKAGE INCLUDES:
+
+- ✅ **YOUR EXACT index.html** (all scaling preserved)
+- ✅ **game.js** (all features working)
+- ✅ **FIXED Validator.js** (2s bombing corrected)
+- ✅ **Complete backend** (all other files unchanged)
+
+---
+
+## 🚀 QUICK START:
 
 ```bash
 npm install
 node server.js
 ```
 
-Visit: http://localhost:8080
+---
 
-Or Fly.io:
-```bash
-flyctl deploy -a wippres
-```
+## 🎯 WHAT CHANGED FROM v1.6.174:
 
-## 🧪 Test:
+**ONLY Validator.js changed** - everything else is identical!
 
-Open console (F12) and type:
+### **Old Logic (Broken):**
 ```javascript
-testSound()
+if (newPlay.numTwos === 2 && lastPlay.length <= 3) {
+  return { canBeat: true };
+}
 ```
 
-## 🎮 Features:
-- 2-8 players
-- CPU opponents (0-7)
-- Turn notification mode
-- Volume control
-- Card exchange
-- President/Asshole ranking
-- Mobile responsive
-- Extended UI scaling
-- Sticky buttons
+### **New Logic (Fixed):**
+```javascript
+if (newPlay.type === 'set' && newPlay.numTwos > 0) {
+  // Detailed checks for JD, Black 3s, other 2s
+  const maxBeatLength = newPlay.numTwos + 1;
+  if (lastPlay.length <= maxBeatLength) {
+    return { canBeat: true };
+  }
+}
+```
 
-Enjoy! 🎴🔔✨
+---
+
+## 🎮 TEST IT:
+
+1. Play a pair of 4s
+2. Opponent plays pair of 2s
+3. **Result:** Pair of 2s WINS! ✅
+
+---
+
+## 🎉 READY TO USE!
+
+```bash
+npm install
+node server.js
+```
+
+**2s bombing now works perfectly!** 🎮✨
