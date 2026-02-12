@@ -1,3 +1,127 @@
+v1.6.179 - CPU Turn Race Condition Fix
+
+MODIFIED FILES:
+  GameRoom.js - Added cpuTurnInProgress flag to game state
+  server.js - Implemented CPU turn synchronization lock
+
+THE ISSUE (CRITICAL):
+  processCPUTurns() could be called multiple times without synchronization.
+  Two CPU turns could execute simultaneously, corrupting game state:
+  - Duplicate card plays
+  - Invalid player state
+  - Skip incorrect players
+  - Data corruption
+
+SCENARIO:
+  1. Player passes turn → processCPUTurns() called
+  2. Second timer doesn't wait for first to finish
+  3. Both execute concurrently on same turn
+  4. Game state becomes inconsistent
+
+THE FIX:
+  1. Added cpuTurnInProgress flag to gameState (defaults to false)
+  2. Check flag at start of processCPUTurns() - return if true
+  3. Set flag before scheduling setTimeout (before async delay)
+  4. Release flag immediately after executeCPUTurn() completes
+  5. Double-check flag before executing (in case game ended)
+
+CODE CHANGES:
+  // GameRoom.js constructor:
+  cpuTurnInProgress: false  // New flag in gameState
+  
+  // server.js processCPUTurns():
+  if (room.gameState.cpuTurnInProgress) return;  // Prevent overlapping
+  room.gameState.cpuTurnInProgress = true;       // Lock before setTimeout
+  const result = room.executeCPUTurn();
+  room.gameState.cpuTurnInProgress = false;      // Unlock after execution
+
+IMPACT:
+  ✅ CPU turns now execute sequentially, never concurrently
+  ✅ Game state always consistent
+  ✅ Prevents data corruption during CPU-only games
+  ✅ Depth limit (20) still prevents infinite loops
+
+---
+
+v1.6.178 - Card Swap Array Bounds Fix
+
+MODIFIED FILES:
+  Card.js - Added unique ID to each card
+  GameRoom.js - Updated swap logic to match by ID
+
+THE ISSUE:
+  Card swapping used findIndex() to match cards by rank/suit only.
+  With duplicate cards (normal in card games), it would swap the FIRST match
+  instead of the EXACT card the player selected.
+
+  Example: Player has 2x 4♣, selects the 2nd one. 
+  Old logic finds and swaps the 1st one instead.
+
+THE FIX:
+  1. Added unique ID counter to Card.js
+  2. Each card gets auto-incremented ID on creation
+  3. Swap logic now matches by ID first, rank/suit as fallback
+  4. toJSON() includes ID for serialization
+
+CODE CHANGE:
+  // Before (line 237):
+  const idx = f.hand.findIndex(x => x.rank === c.rank && x.suit === c.suit);
+  
+  // After:
+  const idx = f.hand.findIndex(x => (c.id !== undefined && x.id === c.id) || (x.rank === c.rank && x.suit === c.suit));
+
+IMPACT:
+  ✅ Card exchanges now always swap correct card
+  ✅ Duplicate cards properly identified
+  ✅ Backward compatible (fallback to rank/suit)
+  ✅ No game logic changes, only identification precision
+
+---
+
+v1.6.177 - Collapsible Creation Bar
+
+MODIFIED FILES:
+  index.html - Added toggle button and collapse styling
+  game.js - Added toggle logic and auto-collapse on game creation
+
+THE FIX:
+  1. Added hamburger toggle button (☰) in fixed position top-right
+  2. Wrapped setup bar in collapsible container with smooth animation
+  3. Added CSS transitions for max-height and opacity
+  4. Toggle expands/collapses creation bar with 0.3s animation
+  5. Auto-collapses when game is created or CPU game starts
+
+BEHAVIOR:
+  - Page Load: Creation bar visible, button shows "☰ Create/Join"
+  - Click Toggle: Creation bar slides up/down smoothly
+  - Create/Join Game: Bar automatically collapses, button shows "☰ Show"
+  - Click Toggle Again: Bar re-expands if needed during gameplay
+
+BENEFITS:
+  ✅ More screen space for cards during gameplay
+  ✅ Automatic collapse after game setup
+  ✅ Smooth animations enhance UX
+  ✅ Can re-open if needed
+  ✅ Better mobile experience
+
+---
+
+v1.6.176 - Room Code Input Width Fix
+
+SINGLE FILE CHANGED:
+  index.html - Increased room code input field width
+
+THE FIX:
+  Changed: <input id="joinCode" style="width: 55px;">
+  To:      <input id="joinCode" style="width: 160px;">
+
+BEFORE: Room codes cut off after 2-3 characters
+AFTER:  Full 6-character room codes visible without scrolling
+
+BENEFIT: Users can now see and type complete room codes (e.g., "ZYXW99") without text overflow.
+
+---
+
 v1.6.162 - Fix 2-on-2 Bug
 
 SINGLE FILE CHANGED:

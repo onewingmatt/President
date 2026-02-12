@@ -1,4 +1,107 @@
-import { Validator } from './Validator.js'; import { RankSystem } from './RankSystem.js';
-export class CPUAI { static decideTurn(hand, lastPlay, options) { if (!lastPlay || lastPlay.type === 'none') return this.makeFirstPlay(hand, options); return this.tryToBeat(hand, lastPlay, options); }
-  static makeFirstPlay(hand, options) { const lowest = hand[0]; const lowestRank = lowest.rank; const matching = hand.filter(c => c.rank === lowestRank); if (lowestRank === '3') { const hasBlack3 = matching.some(c => RankSystem.isBlack3(c)); const hasRed3 = matching.some(c => RankSystem.isRed3(c)); if (hasBlack3 && hasRed3) { const red3s = matching.filter(c => RankSystem.isRed3(c)); return { action: 'play', cardIndices: red3s.map(c => hand.indexOf(c)) }; } } return { action: 'play', cardIndices: matching.map(c => hand.indexOf(c)) }; }
-  static tryToBeat(hand, lastPlay, options) { const requiredLength = lastPlay.length; const jdIndex = hand.findIndex(c => RankSystem.isJackOfDiamonds(c)); if (jdIndex !== -1 && requiredLength === 1) return { action: 'play', cardIndices: [jdIndex] }; const rankGroups = {}; hand.forEach((card, idx) => { if (RankSystem.isJackOfDiamonds(card)) return; if (!rankGroups[card.rank]) rankGroups[card.rank] = []; rankGroups[card.rank].push(idx); }); for (const rank in rankGroups) { const group = rankGroups[rank]; if (group.length >= requiredLength) { if (rank === '3') { const groupCards = group.map(i => hand[i]); const hasBlack3 = groupCards.some(c => RankSystem.isBlack3(c)); const hasRed3 = groupCards.some(c => RankSystem.isRed3(c)); if (hasBlack3 && hasRed3) { const black3Indices = group.filter(i => RankSystem.isBlack3(hand[i])); if (black3Indices.length >= requiredLength) { const testCards = black3Indices.slice(0, requiredLength).map(i => hand[i]); const playType = Validator.getPlayType(testCards, options); const canBeat = Validator.canBeatPlay(playType, lastPlay, options); if (canBeat.canBeat) return { action: 'play', cardIndices: black3Indices.slice(0, requiredLength) }; } const red3Indices = group.filter(i => RankSystem.isRed3(hand[i])); if (red3Indices.length >= requiredLength) { const testCards = red3Indices.slice(0, requiredLength).map(i => hand[i]); const playType = Validator.getPlayType(testCards, options); const canBeat = Validator.canBeatPlay(playType, lastPlay, options); if (canBeat.canBeat) return { action: 'play', cardIndices: red3Indices.slice(0, requiredLength) }; } continue; } } const testCards = group.slice(0, requiredLength).map(i => hand[i]); const playType = Validator.getPlayType(testCards, options); const canBeat = Validator.canBeatPlay(playType, lastPlay, options); if (canBeat.canBeat) return { action: 'play', cardIndices: group.slice(0, requiredLength) }; } } return { action: 'pass' }; } }
+import { Validator } from './Validator.js';
+import { RankSystem } from './RankSystem.js';
+
+export class CPUAI {
+
+  static decideTurn(hand, lastPlay, options) {
+    if (!Array.isArray(hand) || hand.length === 0) {
+      return { action: 'pass' };
+    }
+    // Always sort hand for safety
+    const sortedHand = RankSystem.sortCards([...hand], options);
+    if (!lastPlay || lastPlay.type === 'none') {
+      return this.makeFirstPlay(sortedHand, options);
+    }
+    return this.tryToBeat(sortedHand, lastPlay, options);
+  }
+
+  static makeFirstPlay(hand, options) {
+    if (!Array.isArray(hand) || hand.length === 0) {
+      return { action: 'pass' };
+    }
+    const lowest = hand[0];
+    const lowestRank = lowest.rank;
+    const matching = hand.filter(c => c.rank === lowestRank);
+    if (lowestRank === '3') {
+      const hasBlack3 = matching.some(c => RankSystem.isBlack3(c));
+      const hasRed3 = matching.some(c => RankSystem.isRed3(c));
+      if (hasBlack3 && hasRed3) {
+        const red3s = matching.filter(c => RankSystem.isRed3(c));
+        return {
+          action: 'play',
+          cardIndices: red3s.map(c => hand.indexOf(c))
+        };
+      }
+    }
+    return {
+      action: 'play',
+      cardIndices: matching.map(c => hand.indexOf(c))
+    };
+  }
+
+  static tryToBeat(hand, lastPlay, options) {
+    if (!Array.isArray(hand) || hand.length === 0) {
+      return { action: 'pass' };
+    }
+    const requiredLength = lastPlay.length;
+    const jdIndex = hand.findIndex(c => RankSystem.isJackOfDiamonds(c));
+    if (jdIndex !== -1 && requiredLength === 1) {
+      return { action: 'play', cardIndices: [jdIndex] };
+    }
+    const rankGroups = {};
+    hand.forEach((card, idx) => {
+      if (RankSystem.isJackOfDiamonds(card)) return;
+      if (!rankGroups[card.rank]) {
+        rankGroups[card.rank] = [];
+      }
+      rankGroups[card.rank].push(idx);
+    });
+    for (const rank in rankGroups) {
+      const group = rankGroups[rank];
+      if (group.length >= requiredLength) {
+        if (rank === '3') {
+          const groupCards = group.map(i => hand[i]);
+          const hasBlack3 = groupCards.some(c => RankSystem.isBlack3(c));
+          const hasRed3 = groupCards.some(c => RankSystem.isRed3(c));
+          if (hasBlack3 && hasRed3) {
+            const black3Indices = group.filter(i => RankSystem.isBlack3(hand[i]));
+            if (black3Indices.length >= requiredLength) {
+              const testCards = black3Indices.slice(0, requiredLength).map(i => hand[i]);
+              const playType = Validator.getPlayType(testCards, options);
+              const canBeat = Validator.canBeatPlay(playType, lastPlay, options);
+              if (canBeat.canBeat) {
+                return {
+                  action: 'play',
+                  cardIndices: black3Indices.slice(0, requiredLength)
+                };
+              }
+            }
+            const red3Indices = group.filter(i => RankSystem.isRed3(hand[i]));
+            if (red3Indices.length >= requiredLength) {
+              const testCards = red3Indices.slice(0, requiredLength).map(i => hand[i]);
+              const playType = Validator.getPlayType(testCards, options);
+              const canBeat = Validator.canBeatPlay(playType, lastPlay, options);
+              if (canBeat.canBeat) {
+                return {
+                  action: 'play',
+                  cardIndices: red3Indices.slice(0, requiredLength)
+                };
+              }
+            }
+            continue;
+          }
+        }
+        const testCards = group.slice(0, requiredLength).map(i => hand[i]);
+        const playType = Validator.getPlayType(testCards, options);
+        const canBeat = Validator.canBeatPlay(playType, lastPlay, options);
+        if (canBeat.canBeat) {
+          return {
+            action: 'play',
+            cardIndices: group.slice(0, requiredLength)
+          };
+        }
+      }
+    }
+    return { action: 'pass' };
+  }
+}

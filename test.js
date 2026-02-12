@@ -147,7 +147,7 @@ test('Single 2 CANNOT beat pair (no bombing)', function() {
   const result = Validator.canBeatPlay(newPlay, lastPlay, {});
 
   assert(!result.canBeat, 'Single 2 should NOT beat pair');
-  assert(result.error === 'Must match card count');
+  assert(result.error === 'Single 2 cannot beat pairs/sets');
 });
 
 console.log('');

@@ -1,4 +1,4 @@
-// President Game Client v1.6.175 - Fixed 2s bombing
+// President Game Client v1.6.179 - Fixed CPU turn race condition
 const socket = io();
 
 let roomCode = null;
@@ -7,6 +7,15 @@ let selectedIndices = [];
 let swapMode = false;
 let swapData = null;
 
+// State tracking for DOM optimization
+let lastRenderedState = {
+  currentPlayerName: null,
+  currentPlayerId: null,
+  lastPlay: null,
+  players: null,
+  handLength: 0
+};
+
 // Options Button
 document.getElementById('optionsBtn').addEventListener('click', () => {
   document.getElementById('optionsModal').classList.add('active');
@@ -14,6 +23,60 @@ document.getElementById('optionsBtn').addEventListener('click', () => {
 
 function closeOptions() {
   document.getElementById('optionsModal').classList.remove('active');
+}
+
+// Creation Bar Toggle
+let creationBarExpanded = true;
+const toggleBtn = document.getElementById('toggleCreationBar');
+const setupBar = document.querySelector('.setup');
+
+if (toggleBtn) {
+  toggleBtn.addEventListener('click', () => {
+    creationBarExpanded = !creationBarExpanded;
+    const container = document.querySelector('.container');
+    let setupBar = document.querySelector('.setup');
+    if (creationBarExpanded) {
+      // Restore bar if removed
+      if (!setupBar) {
+        const setupHTML = `
+          <div class="setup">
+            <input type="text" id="playerName" placeholder="Name" value="Player" style="width: 60px;">
+            <select id="numPlayers" style="width: 60px;">
+              <option value="2">2P</option>
+              <option value="3">3P</option>
+              <option value="4" selected>4P</option>
+              <option value="5">5P</option>
+              <option value="6">6P</option>
+              <option value="7">7P</option>
+              <option value="8">8P</option>
+            </select>
+            <select id="numCPU" style="width: 55px;">
+              <option value="0">0</option>
+              <option value="1">1</option>
+              <option value="2">2</option>
+              <option value="3">3</option>
+              <option value="4">4</option>
+              <option value="5">5</option>
+              <option value="6">6</option>
+              <option value="7">7</option>
+            </select>
+            <button onclick="createGame()" style="width: 55px;">CREATE</button>
+            <button onclick="createCPUOnlyGame()" style="width: 55px; background: #ff6b6b;">CPU GAME</button>
+            <button class="room-btn" id="roomDisplay" style="display:none; width: 65px;" title="Click to copy room link" onclick="copyRoomURL()">📋</button>
+            <input type="text" id="joinCode" placeholder="Code" value="" style="width: 160px;">
+            <button onclick="joinGame()" style="width: 45px;">JOIN</button>
+            <button onclick="startGame()" id="startBtn" style="display:none; width: 50px;">▶️</button>
+          </div>
+        `;
+        container.insertAdjacentHTML('afterbegin', setupHTML);
+      }
+      toggleBtn.textContent = '☰ Create/Join';
+    } else {
+      // Remove bar from DOM
+      if (setupBar) setupBar.remove();
+      toggleBtn.textContent = '☰ Show';
+    }
+  });
 }
 
 // Settings Sliders - Update CSS variables
@@ -109,6 +172,26 @@ function createGame() {
   log('Creating game...');
 }
 
+// Watch CPU Game
+function createCPUOnlyGame() {
+  const name = document.getElementById('playerName').value.trim() || 'Spectator';
+  const numPlayers = parseInt(document.getElementById('numPlayers').value);
+
+  if (numPlayers < 2 || numPlayers > 8) {
+    log('⚠️ Players must be between 2-8', 'warning');
+    return;
+  }
+
+  socket.emit('create-cpu-game', {
+    spectatorName: name,
+    options: {
+      num_players: numPlayers
+    }
+  });
+
+  log('Creating CPU-only game...');
+}
+
 // Join Game
 function joinGame() {
   const name = document.getElementById('playerName').value.trim();
@@ -180,6 +263,28 @@ socket.on('game-created', (data) => {
   document.getElementById('roomDisplay').style.display = 'inline-block';
   document.getElementById('startBtn').style.display = 'inline-block';
   log('✅ Room created: ' + data.roomCode);
+  
+  // Auto-collapse creation bar after game creation
+  if (toggleBtn && setupBar) {
+    creationBarExpanded = false;
+    setupBar.classList.add('collapsed');
+    toggleBtn.textContent = '☰ Show';
+  }
+});
+
+socket.on('cpu-game-created', (data) => {
+  roomCode = data.roomCode;
+  document.getElementById('joinCode').value = data.roomCode;
+  document.getElementById('roomDisplay').textContent = data.roomCode;
+  document.getElementById('roomDisplay').style.display = 'inline-block';
+  log('🤖 CPU game created: ' + data.roomCode);
+  
+  // Auto-collapse creation bar after game creation
+  if (toggleBtn && setupBar) {
+    creationBarExpanded = false;
+    setupBar.classList.add('collapsed');
+    toggleBtn.textContent = '☰ Show';
+  }
 });
 
 socket.on('game-started', () => {
@@ -188,25 +293,44 @@ socket.on('game-started', () => {
 });
 
 socket.on('game-state-update', (state) => {
-  // Update turn display
-  const turnDiv = document.getElementById('turn');
-  if (state.currentPlayerName) {
-    turnDiv.textContent = state.currentPlayerName + "'s turn";
-  } else {
-    turnDiv.textContent = 'Waiting...';
+  // Update turn display only if it changed
+  if (state.currentPlayerName !== lastRenderedState.currentPlayerName) {
+    const turnDiv = document.getElementById('turn');
+    turnDiv.textContent = state.currentPlayerName ? 
+      state.currentPlayerName + "'s turn" : 'Waiting...';
+    lastRenderedState.currentPlayerName = state.currentPlayerName;
   }
 
-  // Update players
-  renderPlayers(state.players, state.currentPlayerId);
+  // Update players only if they changed
+  if (JSON.stringify(state.players) !== JSON.stringify(lastRenderedState.players) ||
+      state.currentPlayerId !== lastRenderedState.currentPlayerId) {
+    if (state.isSpectator) {
+      renderSpectatorView(state);
+    } else {
+      renderPlayers(state.players, state.currentPlayerId);
+    }
+    lastRenderedState.players = JSON.parse(JSON.stringify(state.players));
+    lastRenderedState.currentPlayerId = state.currentPlayerId;
+  }
 
-  // Update table (last play)
-  renderTable(state.lastPlay);
+  // Update table only if last play changed
+  if (JSON.stringify(state.lastPlay) !== JSON.stringify(lastRenderedState.lastPlay)) {
+    renderTable(state.lastPlay);
+    lastRenderedState.lastPlay = JSON.parse(JSON.stringify(state.lastPlay));
+  }
 
-  // Update my hand
-  const me = state.players.find(p => p.id === socket.id);
-  if (me && me.hand) {
-    myHand = me.hand;
-    renderHand();
+  // Update my hand only if it changed
+  if (state && state.players && Array.isArray(state.players)) {
+    const me = state.players.find(p => p && p.id === socket.id);
+    if (me && me.hand && Array.isArray(me.hand)) {
+      const newHandLength = me.hand.length;
+      if (newHandLength !== lastRenderedState.handLength || 
+          JSON.stringify(me.hand) !== JSON.stringify(myHand)) {
+        myHand = me.hand;
+        renderHand();
+        lastRenderedState.handLength = newHandLength;
+      }
+    }
   }
 });
 
@@ -245,49 +369,108 @@ socket.on('reconnected', () => {
 function renderPlayers(players, currentId) {
   const playersDiv = document.getElementById('players');
   if (!players || players.length === 0) {
-    playersDiv.innerHTML = '';
+    if (playersDiv) {
+      playersDiv.innerHTML = '';
+    }
     return;
   }
 
-  playersDiv.innerHTML = players.map(p => {
+  const newHTML = players.filter(p => p && p.id).map(p => {
     const isActive = p.id === currentId;
     const cpuIcon = p.isCPU ? ' 🤖' : '';
     const finishedIcon = p.finished ? ' ✓' : '';
+    const playerName = p.name || 'Unknown Player';
+    const handSize = typeof p.handSize === 'number' ? p.handSize : 0;
     return `
       <div class="player ${isActive ? 'active-turn' : ''}">
-        <div>${p.name}${cpuIcon}</div>
-        <div style="font-size: 0.8em;">${p.handSize} cards${finishedIcon}</div>
+        <div>${playerName}${cpuIcon}</div>
+        <div style="font-size: 0.8em;">${handSize} cards${finishedIcon}</div>
       </div>
     `;
   }).join('');
+
+  if (playersDiv && playersDiv.innerHTML !== newHTML) {
+    playersDiv.innerHTML = newHTML;
+  }
+}
+
+function renderSpectatorView(state) {
+  const playersDiv = document.getElementById('players');
+  if (!state.players || state.players.length === 0) {
+    if (playersDiv) {
+      playersDiv.innerHTML = '';
+    }
+    return;
+  }
+
+  const newHTML = state.players.filter(p => p && p.id).map(p => {
+    const isActive = p.id === state.currentPlayerId;
+    const cpuIcon = p.isCPU ? ' 🤖' : '';
+    const finishedIcon = p.finished ? ' ✓' : '';
+    const playerName = p.name || 'Unknown Player';
+    const handSize = p.hand ? p.hand.length : 0;
+    
+    // Show cards for spectator view
+    const handDisplay = p.hand && p.hand.length > 0 ? 
+      p.hand.map(card => {
+        const color = (card.suit === 'H' || card.suit === 'D') ? 'red' : 'black';
+        return `<div class="mini-card ${color}">${cardText(card)}</div>`;
+      }).join('') : '';
+
+    return `
+      <div class="player ${isActive ? 'active-turn' : ''} spectator-player">
+        <div>${playerName}${cpuIcon}${finishedIcon}</div>
+        <div style="font-size: 0.7em; margin: 2px 0;">${handSize} cards</div>
+        <div class="mini-hand">${handDisplay}</div>
+      </div>
+    `;
+  }).join('');
+
+  if (playersDiv && playersDiv.innerHTML !== newHTML) {
+    playersDiv.innerHTML = newHTML;
+  }
 }
 
 function renderTable(lastPlay) {
   const tableDiv = document.getElementById('table');
+  if (!tableDiv) return;
 
-  if (!lastPlay || !lastPlay.cards || lastPlay.cards.length === 0) {
-    tableDiv.innerHTML = 'Table (empty)';
+  if (!lastPlay || !lastPlay.cards || !Array.isArray(lastPlay.cards) || lastPlay.cards.length === 0) {
+    if (tableDiv.textContent !== 'Table (empty)') {
+      tableDiv.textContent = 'Table (empty)';
+    }
     return;
   }
 
-  tableDiv.innerHTML = lastPlay.cards.map(card => {
+  const newHTML = lastPlay.cards.filter(card => card && card.rank && card.suit).map(card => {
     const color = (card.suit === 'H' || card.suit === 'D') ? 'red' : 'black';
     return `<div class="card ${color}">${cardText(card)}</div>`;
   }).join('');
+
+  if (tableDiv.innerHTML !== newHTML) {
+    tableDiv.innerHTML = newHTML;
+  }
 }
 
 function renderHand() {
   const wrapper = document.getElementById('cards-wrapper');
   const title = document.getElementById('hand-title');
+  
+  if (!wrapper || !title) return;
 
-  title.textContent = 'Your Hand (' + myHand.length + ')';
+  const titleText = 'Your Hand (' + (myHand ? myHand.length : 0) + ')';
+  if (title.textContent !== titleText) {
+    title.textContent = titleText;
+  }
 
-  if (myHand.length === 0) {
-    wrapper.innerHTML = '<div style="color: #888;">No cards</div>';
+  if (!myHand || myHand.length === 0) {
+    if (wrapper.innerHTML !== '<div style="color: #888;">No cards</div>') {
+      wrapper.innerHTML = '<div style="color: #888;">No cards</div>';
+    }
     return;
   }
 
-  wrapper.innerHTML = myHand.map((card, index) => {
+  const newHTML = myHand.filter(card => card && card.rank && card.suit).map((card, index) => {
     const color = (card.suit === 'H' || card.suit === 'D') ? 'red' : 'black';
     const selected = selectedIndices.includes(index) ? 'selected' : '';
     return `
@@ -296,6 +479,10 @@ function renderHand() {
       </div>
     `;
   }).join('');
+
+  if (wrapper.innerHTML !== newHTML) {
+    wrapper.innerHTML = newHTML;
+  }
 }
 
 function renderSwapCards() {
@@ -320,6 +507,8 @@ function renderSwapCards() {
 
 // Toggle Card Selection
 function toggleCard(index) {
+  if (!myHand || index < 0 || index >= myHand.length) return;
+  
   const idx = selectedIndices.indexOf(index);
   if (idx === -1) {
     selectedIndices.push(index);
@@ -358,6 +547,7 @@ function submitCardExchange() {
 
 // Helper Functions
 function cardText(card) {
+  if (!card || !card.rank || !card.suit) return '??';
   const suits = { 'H': '♥', 'D': '♦', 'C': '♣', 'S': '♠' };
   return card.rank + (suits[card.suit] || card.suit);
 }

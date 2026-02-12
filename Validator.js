@@ -5,6 +5,10 @@ export class Validator {
     if (!cards || cards.length === 0) {
       return { type: 'invalid', error: 'No cards' };
     }
+    // Defensive: all elements must be objects with rank/suit
+    if (!cards.every(c => c && typeof c.rank === 'string' && typeof c.suit === 'string')) {
+      return { type: 'invalid', error: 'Malformed card(s)' };
+    }
     const sorted = RankSystem.sortCards([...cards], options);
     if (cards.length === 1) {
       return {
@@ -36,6 +40,7 @@ export class Validator {
   }
 
   static canBeatPlay(newPlay, lastPlay, options) {
+    // Defensive: check for valid play objects
     if (!lastPlay || lastPlay.type === 'none') {
       return { canBeat: true };
     }
@@ -73,7 +78,6 @@ export class Validator {
     }
 
     // 2s BOMBING LOGIC - Check BEFORE other validations
-    // Single 2 can only beat singles (not pairs/sets)
     if (newPlay.type === 'single' && newPlay.hasTwo) {
       if (lastPlay.hasTwo) {
         return { canBeat: false, error: '2 cannot beat another 2' };
@@ -90,32 +94,20 @@ export class Validator {
       return { canBeat: true };
     }
 
-    // PAIRS/SETS of 2s CAN bomb - this is the fix!
-    // Pair of 2s beats singles and pairs
-    // Triple of 2s beats singles, pairs, and triples
-    // Quad of 2s beats singles, pairs, triples, and quads
     if (newPlay.type === 'set' && newPlay.numTwos > 0) {
-      // Can't beat JD or Black 3s
       if (lastPlay.hasJD) {
         return { canBeat: false, error: 'Cannot beat Jack of Diamonds' };
       }
       if (lastPlay.numBlack3s > 0) {
         return { canBeat: false, error: 'Cannot beat Black 3s' };
       }
-      // Can't beat other 2s of same or higher count
       if (lastPlay.numTwos >= newPlay.numTwos) {
         return { canBeat: false, error: '2s cannot beat equal or more 2s' };
       }
-
-      // Bombing rule: N 2s can beat up to (N+1) cards
-      // 1x2 in a set (mixed with other ranks) beats singles and pairs
-      // 2x2s beat up to triples
-      // 3x2s beat up to quads
       const maxBeatLength = newPlay.numTwos + 1;
       if (lastPlay.length <= maxBeatLength) {
         return { canBeat: true };
       }
-      // If not bombing, must match length and beat rank
       if (newPlay.length === lastPlay.length && newPlay.rank > lastPlay.rank) {
         return { canBeat: true };
       }
@@ -126,12 +118,9 @@ export class Validator {
     if (newPlay.type !== lastPlay.type || newPlay.length !== lastPlay.length) {
       return { canBeat: false, error: 'Must match card count' };
     }
-
-    // Must be higher rank
     if (newPlay.rank <= lastPlay.rank) {
       return { canBeat: false, error: 'Must be higher rank' };
     }
-
     return { canBeat: true };
   }
 }

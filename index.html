@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>President v1.6.175 - Fixed 2s</title>
+<title>President v1.6.179 - CPU Turn Race Condition Fix</title>
 <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
 <style>
 :root {
@@ -54,6 +54,38 @@ html, body {
   overflow-x: auto;
   min-height: 50px;
   width: 100%;
+  max-height: 200px;
+  overflow: hidden;
+  transition: max-height 0.3s ease-in-out, opacity 0.3s ease-in-out;
+  opacity: 1;
+}
+
+.setup.collapsed {
+  max-height: 0;
+  opacity: 0;
+  padding: 0;
+  pointer-events: none;
+}
+
+#toggleCreationBar {
+  position: fixed;
+  top: 4px;
+  right: 4px;
+  background: #1a8c3a;
+  color: #fff;
+  border: none;
+  padding: 8px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: bold;
+  z-index: 101;
+  white-space: nowrap;
+  transition: background 0.2s;
+}
+
+#toggleCreationBar:hover {
+  background: #0d5f1f;
 }
 
 input, select {
@@ -545,6 +577,41 @@ button {
   background: #aaa;
   cursor: not-allowed;
 }
+
+/* Spectator View Styles */
+.spectator-player {
+  padding: 8px;
+  min-width: 120px;
+  background: #1a4a2f;
+  border: 1px solid #2a5a3f;
+}
+
+.mini-hand {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1px;
+  margin-top: 4px;
+  justify-content: center;
+}
+
+.mini-card {
+  font-size: 8px;
+  padding: 1px 2px;
+  border-radius: 2px;
+  background: #fff;
+  color: #000;
+  border: 1px solid #ccc;
+  line-height: 1;
+}
+
+.mini-card.red {
+  color: #d32f2f;
+}
+
+.mini-card.black {
+  color: #000;
+}
+
 </style>
 </head>
 <body>
@@ -568,9 +635,9 @@ button {
     <button class="modal-close" onclick="closeOptions()">×</button>
     <h2 style="margin-bottom: 8px; font-size: 16px;">⚙️ Settings</h2>
     <div class="version-info">
-      🎮 President v1.6.175<br>
-      ✅ FIXED: 2s bombing now works!<br>
-      ✅ Pairs of 2s beat pairs ✨
+      🎮 President v1.6.179<br>
+      ✅ FIXED: CPU turn race condition<br>
+      ✅ Prevents concurrent turn execution ✨
     </div>
 
     <div style="border-bottom: 2px solid #51cf66; padding-bottom: 10px; margin-bottom: 10px;">
@@ -701,6 +768,7 @@ button {
 </div>
 
 <div class="container">
+  <button id="toggleCreationBar">☰ Create/Join</button>
   <div class="setup">
     <input type="text" id="playerName" placeholder="Name" value="Player" style="width: 60px;">
     <select id="numPlayers" style="width: 60px;">
@@ -723,8 +791,9 @@ button {
       <option value="7">7</option>
     </select>
     <button onclick="createGame()" style="width: 55px;">CREATE</button>
+    <button onclick="createCPUOnlyGame()" style="width: 55px; background: #ff6b6b;">CPU GAME</button>
     <button class="room-btn" id="roomDisplay" style="display:none; width: 65px;" title="Click to copy room link" onclick="copyRoomURL()">📋</button>
-    <input type="text" id="joinCode" placeholder="Code" value="" style="width: 55px;">
+    <input type="text" id="joinCode" placeholder="Code" value="" style="width: 160px;">
     <button onclick="joinGame()" style="width: 45px;">JOIN</button>
     <button onclick="startGame()" id="startBtn" style="display:none; width: 50px;">▶️</button>
   </div>
