@@ -8,6 +8,6 @@ export class RankSystem {
   static countBlack3s(cards) { return cards.filter(c => this.isBlack3(c)).length; }
   static countRed3s(cards) { return cards.filter(c => this.isRed3(c)).length; }
   static countTwos(cards) { return cards.filter(c => this.isTwo(c)).length; }
-  static rankValue(card, options) { if (this.isJackOfDiamonds(card)) return 15; if (this.isBlack3(card)) return 14; if (this.isTwo(card)) return 13; if (card.rank === '3') return 0; const idx = this.baseRankOrder.indexOf(card.rank); return idx >= 0 ? idx : 0; }
+  static rankValue(card, options) { if (this.isJackOfDiamonds(card)) return options && options.jackOfDiamondsBomb === false ? this.baseRankOrder.indexOf('J') : 15; if (this.isBlack3(card)) return 14; if (this.isTwo(card)) return 13; if (card.rank === '3') return 0; const idx = this.baseRankOrder.indexOf(card.rank); return idx >= 0 ? idx : 0; }
   static sortCards(cards, options) { return cards.sort((a, b) => { const valA = this.rankValue(a, options); const valB = this.rankValue(b, options); if (valA !== valB) return valA - valB; const suitOrder = { 'C': 0, 'D': 1, 'H': 2, 'S': 3 }; return (suitOrder[a.suit] || 0) - (suitOrder[b.suit] || 0); }); }
 }

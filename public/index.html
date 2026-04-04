@@ -1,2 +1,1564 @@
 <!DOCTYPE html>
-<!-- ...existing code from index.html... -->
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>President v1.6.179 - CPU Turn Race Condition Fix</title>
+<script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+<style>
+:root {
+	--hand-size: 3.7;
+	--table-size: 4.1;
+	--players-size: 2.0;
+	--card-radius: 11px;
+	--log-size: 1.2;
+	--button-size: 3.0;
+	--table-flex: 223;
+	--hand-flex: 480;
+	--log-flex: 99;
+	--table-track: 1.39fr;
+	--hand-track: 2.99fr;
+	--log-track: 0.62fr;
+	--log-column-track: 0.75fr;
+	--color-page: #0a1f0f;
+	--color-surface: #153322;
+	--color-surface-strong: #0f3d1d;
+	--color-surface-muted: rgba(255,255,255,0.08);
+	--color-surface-overlay: rgba(0,0,0,0.72);
+	--color-accent: #ffeb3b;
+	--color-accent-strong: #dbc726;
+	--color-success: #51cf66;
+	--color-danger: #ff5b5b;
+	--color-warning: #ffd54f;
+	--color-text: #f7f9f4;
+	--color-text-muted: #c2d1c5;
+	--color-text-dark: #111111;
+	--color-border: #33543b;
+	--color-focus: #a5f2b1;
+	--color-shadow: rgba(0,0,0,0.35);
+	--space-2: 8px;
+	--space-3: 12px;
+	--space-4: 16px;
+	--radius-sm: 4px;
+	--radius-md: 8px;
+	--radius-lg: 12px;
+}
+
+* {
+	margin: 0;
+	padding: 0;
+	box-sizing: border-box;
+}
+
+html {
+	font-size: 16px;
+}
+
+html, body {
+	width: 100%;
+	min-height: 100%;
+	font-family: Arial, sans-serif;
+	color: var(--color-text);
+	overflow-x: hidden;
+	overflow-y: auto;
+}
+
+body {
+	background:
+		radial-gradient(circle at top left, rgba(255,235,59,0.1), transparent 24%),
+		radial-gradient(circle at top right, rgba(81,207,102,0.08), transparent 22%),
+		linear-gradient(180deg, #0e2817 0%, #08150c 100%);
+}
+
+.container {
+	width: min(100%, 1400px);
+	min-height: 100dvh;
+	height: 100dvh;
+	margin: 0 auto;
+	display: flex;
+	flex-direction: column;
+	gap: var(--space-3);
+	padding: 64px 12px 12px;
+}
+
+.setup {
+	background: var(--color-surface-strong);
+	padding: var(--space-3);
+	border-radius: var(--radius-lg);
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	gap: var(--space-2);
+	align-items: stretch;
+	flex-shrink: 0;
+	width: 100%;
+		max-height: min(70vh, 720px);
+		overflow-y: auto;
+		overflow-x: hidden;
+	transition: max-height 0.25s ease-in-out, opacity 0.2s ease-in-out, padding 0.2s ease-in-out, border-color 0.2s ease-in-out;
+	opacity: 1;
+	border: 1px solid var(--color-border);
+	box-shadow: 0 14px 28px var(--color-shadow);
+}
+
+.setup > * {
+	width: 100%;
+}
+
+.setup.collapsed {
+	max-height: 0;
+	opacity: 0;
+	padding: 0;
+	border-color: transparent;
+	pointer-events: none;
+}
+
+#toggleCreationBar {
+	position: fixed;
+	top: 12px;
+	left: 12px;
+	background: var(--color-surface-strong);
+	color: var(--color-text);
+	border: 1px solid var(--color-border);
+	padding: 0 var(--space-3);
+	min-height: 44px;
+	border-radius: var(--radius-md);
+	cursor: pointer;
+	font-size: 0.9rem;
+	font-weight: bold;
+	z-index: 101;
+	white-space: nowrap;
+	box-shadow: 0 12px 24px var(--color-shadow);
+	-webkit-backdrop-filter: blur(10px);
+	backdrop-filter: blur(10px);
+}
+
+#toggleCreationBar:hover {
+	background: #184c27;
+}
+
+input, select {
+	min-height: 44px;
+	padding: 0 var(--space-3);
+	border-radius: var(--radius-md);
+	border: 1px solid #ccc;
+	font-size: 0.95rem;
+	min-width: 0;
+	color: var(--color-text-dark);
+}
+
+input[type="range"] {
+	-webkit-appearance: none;
+	appearance: none;
+	min-height: 0;
+	height: 6px;
+	padding: 0;
+	border: none;
+	border-radius: 999px;
+	background: linear-gradient(90deg, rgba(255,235,59,0.96), rgba(81,207,102,0.92));
+	box-shadow: none;
+	accent-color: var(--color-success);
+}
+
+input[type="range"]::-webkit-slider-thumb {
+	-webkit-appearance: none;
+	appearance: none;
+	width: 18px;
+	height: 18px;
+	border-radius: 50%;
+	background: #fff;
+	border: 2px solid var(--color-surface-strong);
+	box-shadow: 0 2px 8px rgba(0,0,0,0.22);
+	cursor: pointer;
+}
+
+input[type="range"]::-moz-range-track {
+	height: 6px;
+	border: none;
+	border-radius: 999px;
+	background: linear-gradient(90deg, rgba(255,235,59,0.96), rgba(81,207,102,0.92));
+}
+
+input[type="range"]::-moz-range-thumb {
+	width: 18px;
+	height: 18px;
+	border-radius: 50%;
+	background: #fff;
+	border: 2px solid var(--color-surface-strong);
+	box-shadow: 0 2px 8px rgba(0,0,0,0.22);
+	cursor: pointer;
+}
+
+input[type="range"]:disabled {
+	opacity: 0.45;
+	cursor: not-allowed;
+	filter: saturate(0.5);
+}
+
+button {
+	min-height: 44px;
+	padding: 0 var(--space-3);
+	background: var(--color-accent);
+	color: var(--color-text-dark);
+	border: none;
+	border-radius: var(--radius-md);
+	cursor: pointer;
+	font-weight: bold;
+	font-size: 0.95rem;
+	white-space: nowrap;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: 8px;
+	line-height: 1;
+	transition: transform 0.15s ease, box-shadow 0.2s ease, filter 0.2s ease, background 0.2s ease;
+	touch-action: manipulation;
+	box-shadow: 0 8px 18px rgba(0,0,0,0.18);
+}
+
+button:hover:not(:disabled),
+.toggle-switch:hover {
+	transform: translateY(-1px);
+	filter: brightness(0.98);
+}
+
+button:active:not(:disabled),
+.toggle-switch:active {
+	transform: translateY(0);
+	filter: brightness(0.94);
+}
+
+button:disabled {
+	opacity: 0.55;
+	cursor: not-allowed;
+	box-shadow: none;
+	transform: none;
+	filter: saturate(0.7);
+}
+
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+.toggle-switch:focus-visible,
+.card-item:focus-visible,
+.swap-card:focus-visible,
+.options-btn:focus-visible {
+	outline: 3px solid var(--color-focus);
+	outline-offset: 2px;
+}
+
+.room-btn,
+.setup-action-join,
+.setup-room-link {
+	background: rgba(255,255,255,0.12);
+	color: var(--color-text);
+	border: 1px solid var(--color-border);
+	box-shadow: none;
+}
+
+.setup-action-create-cpu {
+	background: var(--color-warning);
+	color: var(--color-text-dark);
+}
+
+.setup-action-start {
+	background: var(--color-success);
+	color: var(--color-text-dark);
+	letter-spacing: 0.03em;
+}
+
+.top-bar {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: 10px;
+	flex-wrap: wrap;
+	min-height: 52px;
+	background: linear-gradient(135deg, var(--color-accent), var(--color-accent-strong));
+	padding: var(--space-3) var(--space-4);
+	text-align: center;
+	color: var(--color-text-dark);
+	font-size: clamp(1rem, 2.8vw, 1.1rem);
+	font-weight: 700;
+	flex-shrink: 0;
+	border-radius: var(--radius-lg);
+	box-shadow: 0 12px 24px var(--color-shadow);
+	position: relative;
+	overflow: hidden;
+}
+
+.top-bar::before {
+	content: 'Status';
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	padding: 4px 10px;
+	border-radius: 999px;
+	background: rgba(17,17,17,0.14);
+	font-size: 0.7rem;
+	font-weight: 800;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+}
+
+.top-bar[data-phase="waiting"] {
+	background: linear-gradient(135deg, #ffef70, var(--color-accent-strong));
+}
+
+.top-bar[data-phase="playing"] {
+	background: linear-gradient(135deg, #73e388, #39b85a);
+}
+
+.top-bar[data-phase="waiting"]::before {
+	content: 'Lobby';
+}
+
+.top-bar[data-phase="playing"]::before {
+	content: 'Live';
+}
+
+.top-bar[data-viewer-state="active"] {
+	box-shadow: 0 0 0 2px rgba(81,207,102,0.3), 0 12px 24px var(--color-shadow);
+}
+
+.players {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
+	gap: var(--space-2);
+	padding: 0;
+	background: none;
+	flex-shrink: 0;
+}
+
+.player {
+	background: var(--color-surface-muted);
+	padding: var(--space-3);
+	min-width: 0;
+	text-align: left;
+	font-size: clamp(0.72rem, calc(0.58rem * var(--players-size)), 1.4rem);
+	white-space: normal;
+	border-radius: var(--radius-lg);
+	border: 1px solid var(--color-border);
+	display: flex;
+	flex-direction: column;
+	gap: var(--space-2);
+	box-shadow: 0 8px 20px rgba(0,0,0,0.16);
+}
+
+.player.active-turn {
+	background: linear-gradient(180deg, rgba(15,61,29,0.96), rgba(21,51,34,0.96));
+	color: var(--color-text);
+	border-color: var(--color-success);
+}
+
+.player-header {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+}
+
+.player-name-row {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 8px;
+	flex-wrap: wrap;
+}
+
+.player-name {
+	font-weight: 700;
+	font-size: clamp(0.84rem, calc(0.72rem * var(--players-size)), 1.7rem);
+}
+
+.player-badges {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 4px;
+}
+
+.player-badge {
+	display: inline-flex;
+	align-items: center;
+	border-radius: 999px;
+	padding: 2px 6px;
+	font-size: clamp(0.52rem, calc(0.22rem * var(--players-size)), 0.96rem);
+	line-height: 1.2;
+	font-weight: 700;
+	letter-spacing: 0.01em;
+}
+
+.player-badge--you {
+	background: var(--color-accent);
+	color: var(--color-text-dark);
+}
+
+.player-badge--turn {
+	background: var(--color-success);
+	color: var(--color-text-dark);
+}
+
+.player-badge--cpu {
+	background: rgba(255,255,255,0.12);
+	color: var(--color-text);
+}
+
+.player-badge--finished {
+	background: rgba(255,235,59,0.16);
+	color: var(--color-accent);
+}
+
+.player-badge--offline {
+	background: rgba(255,91,91,0.18);
+	color: #ffd6d6;
+}
+
+.game-area {
+	display: grid;
+	grid-template-columns: 1fr;
+	grid-template-rows: auto auto auto;
+	grid-template-areas:
+		"table"
+		"hand"
+		"log";
+	gap: var(--space-3);
+	flex: 1;
+	min-height: 0;
+}
+
+body[data-auto-scale="true"] .game-area {
+	grid-template-rows:
+		minmax(160px, var(--table-track))
+		minmax(220px, var(--hand-track))
+		minmax(140px, var(--log-track));
+}
+
+.table {
+	grid-area: table;
+	background: linear-gradient(180deg, var(--color-surface-strong), var(--color-surface));
+	padding: var(--space-4);
+	text-align: center;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: var(--space-3);
+	overflow-x: auto;
+	overflow-y: hidden;
+	border: 1px solid var(--color-border);
+	border-radius: var(--radius-lg);
+	flex-grow: var(--table-flex);
+	flex-shrink: 1;
+	flex-basis: 0;
+	min-height: 160px;
+	box-shadow: 0 12px 24px var(--color-shadow);
+}
+
+.card {
+	width: clamp(72px, calc(16px * var(--table-size)), 148px);
+	aspect-ratio: 40 / 55;
+	height: auto;
+	background: #fff;
+	border: 2px solid #333;
+	border-radius: clamp(8px, var(--card-radius), 22px);
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	font-weight: bold;
+	font-size: clamp(0.95rem, calc(0.3rem * var(--table-size)), 1.2rem);
+	flex-shrink: 0;
+	box-shadow: 0 10px 20px rgba(0,0,0,0.16);
+}
+
+.card.red {
+	color: #d32f2f;
+}
+
+.card.black {
+	color: #000;
+}
+
+body[data-auto-card-size="false"] .card {
+	width: calc(16px * var(--table-size));
+	font-size: calc(0.3rem * var(--table-size));
+}
+
+#hand-container {
+	grid-area: hand;
+	background: var(--color-surface-muted);
+	padding: var(--space-4);
+	border: 1px solid var(--color-border);
+	overflow-y: auto;
+	display: block;
+	flex-grow: var(--hand-flex);
+	flex-shrink: 1;
+	flex-basis: 0;
+	min-height: 220px;
+	border-radius: var(--radius-lg);
+	box-shadow: 0 12px 24px var(--color-shadow);
+}
+
+#hand-title {
+	font-weight: bold;
+	margin-bottom: var(--space-3);
+	font-size: clamp(1rem, 2vw, 1.15rem);
+	color: var(--color-accent);
+}
+
+#cards-wrapper {
+	display: flex;
+	flex-wrap: wrap;
+	gap: var(--space-2);
+	align-items: flex-start;
+}
+
+.card-item {
+	width: clamp(64px, calc(16px * var(--hand-size)), 138px);
+	aspect-ratio: 40 / 55;
+	height: auto;
+	background: #fff;
+	border: 2px solid #333;
+	border-radius: clamp(8px, var(--card-radius), 22px);
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	cursor: pointer;
+	font-weight: bold;
+	font-size: clamp(0.9rem, calc(0.28rem * var(--hand-size)), 1.1rem);
+	flex-shrink: 0;
+	appearance: none;
+	padding: 0;
+	line-height: 1.1;
+	box-shadow: 0 8px 18px rgba(0,0,0,0.14);
+}
+
+.card-item:hover,
+.card-item:focus-visible {
+	transform: translateY(-2px);
+}
+
+.card-item.selected {
+	background: #1c7440;
+	color: #fff;
+	border-color: var(--color-success);
+	box-shadow: 0 0 0 2px rgba(81,207,102,0.3), 0 14px 24px rgba(0,0,0,0.2);
+}
+
+.card-item.red {
+	color: #d32f2f;
+}
+
+.card-item.black {
+	color: #000;
+}
+
+body[data-auto-card-size="false"] .card-item {
+	width: calc(16px * var(--hand-size));
+	font-size: calc(0.28rem * var(--hand-size));
+}
+
+.log {
+	grid-area: log;
+	background: #132016;
+	padding: var(--space-3);
+	overflow-y: auto;
+	font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+	font-size: clamp(0.72rem, calc(0.38rem + 0.52rem * var(--log-size)), 1.45rem);
+	color: var(--color-text-muted);
+	border: 1px solid var(--color-border);
+	flex-grow: var(--log-flex);
+	flex-shrink: 1;
+	flex-basis: 0;
+	min-height: 140px;
+	border-radius: var(--radius-lg);
+	box-shadow: 0 12px 24px var(--color-shadow);
+}
+
+.log-line {
+	margin: 2px 0;
+	padding: 2px 4px;
+	border-radius: 6px;
+}
+
+.log-line.error {
+	color: #ffd1d1;
+	background: rgba(255,68,68,0.16);
+	border-left: 2px solid var(--color-danger);
+}
+
+.log-line.warning {
+	color: var(--color-warning);
+	background: rgba(255,213,79,0.14);
+	border-left: 2px solid var(--color-warning);
+}
+
+.controls {
+	display: grid;
+	grid-template-columns: repeat(3, minmax(0, 1fr));
+	gap: var(--space-2);
+	flex-shrink: 0;
+	padding: 0;
+	background: none;
+	border-top: none;
+}
+
+.container.has-sticky-controls {
+	padding-bottom: calc(104px + env(safe-area-inset-bottom, 0px));
+}
+
+.controls.sticky {
+	position: fixed;
+	left: 12px;
+	right: 12px;
+	bottom: max(12px, env(safe-area-inset-bottom, 0px));
+	z-index: 120;
+	background: rgba(10,31,15,0.96);
+	padding: var(--space-2);
+	border: 1px solid var(--color-border);
+	border-radius: var(--radius-lg);
+	box-shadow: 0 -2px 10px rgba(0,0,0,0.5);
+	-webkit-backdrop-filter: blur(8px);
+	backdrop-filter: blur(8px);
+}
+
+.setup button,
+.swap-button,
+.settings-done {
+	min-height: clamp(44px, calc(16px * var(--button-size)), 68px);
+	font-size: clamp(0.84rem, calc(0.22rem + 0.26rem * var(--button-size)), 1.18rem);
+}
+
+.controls button {
+	min-height: clamp(48px, calc(24px + 8px * var(--button-size)), 80px);
+	padding: 0 var(--space-3);
+	font-size: clamp(0.92rem, calc(0.3rem + 0.28rem * var(--button-size)), 1.35rem);
+	border-radius: var(--radius-lg);
+}
+
+#playBtn {
+	background: var(--color-success);
+	color: var(--color-text-dark);
+}
+
+#clearBtn {
+	background: var(--color-accent);
+	color: var(--color-text-dark);
+}
+
+#passBtn {
+	background: rgba(255,255,255,0.1);
+	color: var(--color-text);
+	border: 1px solid var(--color-border);
+	box-shadow: none;
+}
+
+.options-btn {
+	position: fixed;
+	top: 12px;
+	right: 12px;
+	width: 48px;
+	height: 48px;
+	padding: 0;
+	background: linear-gradient(180deg, rgba(21,51,34,0.98), rgba(15,61,29,0.98));
+	color: var(--color-text);
+	border: 1px solid var(--color-border);
+	border-radius: 50%;
+	font-size: 1.35rem;
+	cursor: pointer;
+	z-index: 100;
+	box-shadow: 0 12px 24px var(--color-shadow);
+	-webkit-backdrop-filter: blur(10px);
+	backdrop-filter: blur(10px);
+}
+
+.options-btn > span,
+.modal-close > span {
+	display: block;
+	line-height: 1;
+	transform: translateY(-1px);
+}
+
+.modal {
+	display: none;
+	position: fixed;
+	top: 0;
+	left: 0;
+	width: 100%;
+	height: 100%;
+	background: var(--color-surface-overlay);
+	z-index: 999;
+	align-items: center;
+	justify-content: center;
+	overflow-y: auto;
+}
+
+.modal.active {
+	display: flex;
+}
+
+.modal-content {
+	background: var(--color-surface);
+	padding: 52px var(--space-4) var(--space-4);
+	border-radius: var(--radius-lg);
+	width: min(92vw, 560px);
+	max-height: 90vh;
+	overflow-y: auto;
+	margin: auto;
+	position: relative;
+	border: 1px solid var(--color-border);
+	box-shadow: 0 18px 36px var(--color-shadow);
+	display: flex;
+	flex-direction: column;
+	gap: var(--space-3);
+}
+
+.modal-close {
+	position: absolute;
+	top: 8px;
+	right: 8px;
+	width: 38px;
+	height: 38px;
+	min-height: 38px;
+	padding: 0;
+	background: rgba(255,255,255,0.08);
+	border: 1px solid var(--color-border);
+	color: var(--color-text);
+	font-size: 1.35rem;
+	cursor: pointer;
+	box-shadow: none;
+	border-radius: 50%;
+}
+
+.version-info {
+	background: linear-gradient(180deg, rgba(255,235,59,0.12), rgba(255,235,59,0.06));
+	padding: var(--space-3);
+	border-left: 3px solid var(--color-accent);
+	border-radius: var(--radius-sm);
+	font-size: 0.85rem;
+	display: grid;
+	gap: 4px;
+	line-height: 1.45;
+}
+
+.settings-header {
+	display: grid;
+	gap: 6px;
+}
+
+.settings-eyebrow {
+	font-size: 0.72rem;
+	font-weight: 800;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+	color: var(--color-accent);
+}
+
+.settings-title {
+	padding-right: 44px;
+	font-size: 1.35rem;
+	line-height: 1.15;
+}
+
+.settings-lead {
+	max-width: 44ch;
+	font-size: 0.92rem;
+	line-height: 1.5;
+	color: var(--color-text-muted);
+}
+
+.settings-meta {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+	margin-top: 8px;
+}
+
+.settings-chip {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	padding: 4px 10px;
+	border-radius: 999px;
+	background: rgba(17,17,17,0.1);
+	color: var(--color-text-dark);
+	font-size: 0.72rem;
+	font-weight: 700;
+	letter-spacing: 0.03em;
+}
+
+.settings-section {
+	border: 1px solid rgba(255,255,255,0.08);
+	background: rgba(255,255,255,0.04);
+	padding: var(--space-3);
+	border-radius: var(--radius-lg);
+}
+
+.settings-section--primary {
+	border-color: rgba(81,207,102,0.32);
+	background: linear-gradient(180deg, rgba(81,207,102,0.12), rgba(255,255,255,0.04));
+}
+
+.settings-section-title {
+	font-weight: bold;
+	color: var(--color-accent);
+	margin-bottom: 4px;
+	font-size: 0.95rem;
+}
+
+.settings-section-copy {
+	font-size: 0.82rem;
+	line-height: 1.45;
+	color: var(--color-text-muted);
+	margin-bottom: 12px;
+}
+
+	.setup-gameplay-section {
+		grid-column: 1 / -1;
+	}
+
+.settings-note {
+	font-size: 0.82rem;
+	color: var(--color-text-muted);
+	padding: 4px 0 0;
+	line-height: 1.45;
+}
+
+.settings-stack {
+	display: grid;
+	gap: 12px;
+}
+
+.scale-group {
+	margin: 12px 0;
+}
+
+.scale-group + .scale-group {
+	margin-top: 16px;
+	padding-top: 14px;
+	border-top: 1px solid rgba(255,255,255,0.08);
+}
+
+.scale-label {
+	font-weight: bold;
+	margin-bottom: 8px;
+	font-size: 0.9rem;
+	color: var(--color-text);
+}
+
+.scale-row {
+	display: grid;
+	grid-template-columns: minmax(100px, 118px) minmax(0, 1fr) auto;
+	align-items: center;
+	gap: 8px;
+	margin: 6px 0;
+}
+
+.scale-row label {
+	min-width: 0;
+	font-size: 0.85rem;
+	color: var(--color-text);
+}
+
+.scale-row input {
+	width: 100%;
+}
+
+.scale-row span {
+	min-width: 58px;
+	text-align: right;
+	color: var(--color-success);
+	font-family: monospace;
+	font-size: 0.8rem;
+	padding: 4px 8px;
+	border-radius: 999px;
+	background: rgba(81,207,102,0.1);
+}
+
+.toggle {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+	margin: 0;
+}
+
+.toggle span {
+	flex: 1;
+	line-height: 1.35;
+}
+
+.toggle-copy {
+	display: grid;
+	gap: 2px;
+	min-width: 0;
+}
+
+.toggle-title {
+	font-weight: 700;
+	color: var(--color-text);
+}
+
+.toggle-description {
+	font-size: 0.8rem;
+	line-height: 1.4;
+	color: var(--color-text-muted);
+}
+
+.toggle-switch {
+	position: relative;
+	width: 48px;
+	height: 28px;
+	background: #4c5f51;
+	border-radius: 999px;
+	cursor: pointer;
+	transition: 0.3s;
+	flex-shrink: 0;
+	padding: 0;
+	border: none;
+	box-shadow: none;
+}
+
+.toggle-switch.active {
+	background: var(--color-success);
+}
+
+.toggle-slider {
+	position: absolute;
+	top: 3px;
+	left: 3px;
+	width: 22px;
+	height: 22px;
+	background: white;
+	border-radius: 50%;
+	transition: 0.3s;
+}
+
+.toggle-switch.active .toggle-slider {
+	transform: translateX(20px);
+}
+
+.toggle-label-accent {
+	color: var(--color-success);
+}
+
+.toggle-label-primary {
+	font-weight: bold;
+	color: var(--color-accent);
+}
+
+.toggle-spaced {
+	margin-top: 2px;
+}
+
+.settings-actions {
+	position: sticky;
+	bottom: calc(var(--space-4) * -1);
+	display: flex;
+	justify-content: flex-end;
+	padding-top: var(--space-3);
+	margin-top: var(--space-2);
+	background: linear-gradient(180deg, rgba(21,51,34,0), rgba(21,51,34,0.92) 32%);
+}
+
+.settings-done {
+	min-width: 132px;
+	background: var(--color-accent);
+	color: var(--color-text-dark);
+}
+
+.swap-screen {
+	display: none;
+	position: fixed;
+	top: 0;
+	left: 0;
+	width: 100%;
+	height: 100%;
+	background: rgba(0,0,0,0.9);
+	z-index: 300;
+	align-items: center;
+	justify-content: center;
+	flex-direction: column;
+	gap: 16px;
+	padding: 16px;
+	overflow-y: auto;
+}
+
+.swap-screen.active {
+	display: flex;
+}
+
+.swap-content {
+	background: var(--color-surface);
+	padding: 24px;
+	border-radius: var(--radius-lg);
+	border: 2px solid var(--color-success);
+	width: min(100%, 680px);
+	box-shadow: 0 18px 36px var(--color-shadow);
+}
+
+.swap-title {
+	font-size: 24px;
+	color: var(--color-accent);
+	font-weight: bold;
+	text-align: center;
+	margin-bottom: 16px;
+}
+
+.swap-role {
+	font-size: 18px;
+	color: var(--color-success);
+	font-weight: bold;
+	text-align: center;
+	padding: 12px;
+	background: rgba(81,207,102,0.2);
+	border-radius: var(--radius-md);
+	margin-bottom: 8px;
+}
+
+.swap-instruction {
+	font-size: 13px;
+	color: var(--color-text);
+	text-align: center;
+	background: rgba(81,207,102,0.2);
+	padding: 12px;
+	border-radius: var(--radius-md);
+	margin-bottom: 12px;
+}
+
+.swap-selected {
+	font-size: 13px;
+	color: var(--color-accent);
+	text-align: center;
+	margin-bottom: 12px;
+	font-weight: bold;
+}
+
+.swap-caption {
+	font-weight: bold;
+	color: var(--color-accent);
+	margin-bottom: 8px;
+}
+
+.swap-cards {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+	margin-bottom: 16px;
+	justify-content: center;
+}
+
+.swap-card {
+	width: clamp(60px, 16vw, 78px);
+	aspect-ratio: 40 / 55;
+	height: auto;
+	background: #fff;
+	border: 3px solid #333;
+	border-radius: 10px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	cursor: pointer;
+	font-weight: bold;
+	font-size: 11px;
+	transition: all 0.3s;
+	appearance: none;
+	padding: 0;
+	line-height: 1.1;
+	box-shadow: 0 10px 18px rgba(0,0,0,0.14);
+}
+
+.swap-card:hover,
+.swap-card:focus-visible {
+	transform: scale(1.04);
+}
+
+.swap-card.selected {
+	background: #1c7440;
+	border-color: var(--color-accent);
+	color: #fff;
+	box-shadow: 0 0 0 2px rgba(255,235,59,0.26), 0 10px 18px rgba(0,0,0,0.2);
+}
+
+.swap-card.red {
+	color: #d32f2f;
+}
+
+.swap-card.black {
+	color: #000;
+}
+
+.swap-button {
+	padding: 0 36px;
+	min-height: 48px;
+	background: var(--color-accent);
+	color: var(--color-text-dark);
+	border: none;
+	border-radius: var(--radius-md);
+	font-weight: bold;
+	cursor: pointer;
+	margin: 0 auto;
+}
+
+.swap-button:disabled {
+	background: rgba(255,255,255,0.18);
+	color: var(--color-text-muted);
+	border: 1px solid var(--color-border);
+	cursor: not-allowed;
+}
+
+.spectator-player {
+	padding: 8px;
+	min-width: 120px;
+	background: rgba(21,51,34,0.95);
+	border: 1px solid var(--color-border);
+}
+
+.mini-hand {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 1px;
+	margin-top: 4px;
+	justify-content: center;
+}
+
+.mini-card {
+	font-size: 8px;
+	padding: 1px 2px;
+	border-radius: 2px;
+	background: #fff;
+	color: #000;
+	border: 1px solid #ccc;
+	line-height: 1;
+}
+
+.mini-card.red {
+	color: #d32f2f;
+}
+
+.mini-card.black {
+	color: #000;
+}
+
+.player-meta {
+	font-size: clamp(0.64rem, calc(0.46rem * var(--players-size)), 1.08rem);
+	color: var(--color-text-muted);
+}
+
+.player-meta-compact {
+	font-size: clamp(0.58rem, calc(0.42rem * var(--players-size)), 0.96rem);
+	margin: 2px 0;
+}
+
+.empty-hand {
+	color: var(--color-text-muted);
+	padding: var(--space-4);
+	text-align: center;
+	border: 1px dashed var(--color-border);
+	border-radius: var(--radius-lg);
+	background: rgba(255,255,255,0.03);
+	width: 100%;
+}
+
+.setup-field-name,
+.setup-field-players,
+.setup-field-cpu,
+.setup-action-create,
+.setup-action-create-cpu,
+.setup-room-link,
+.setup-field-join,
+.setup-action-join,
+.setup-action-start {
+	width: 100%;
+}
+
+body[data-auto-card-size="false"] .swap-card {
+	width: calc(14px * var(--hand-size));
+	font-size: calc(0.22rem * var(--hand-size));
+}
+
+@media (max-width: 520px) {
+	.scale-row {
+		grid-template-columns: minmax(0, 1fr) auto;
+	}
+
+	.scale-row label {
+		grid-column: 1 / -1;
+	}
+
+	.toggle {
+		align-items: flex-start;
+	}
+}
+
+@media (min-width: 640px) {
+	.container {
+		padding: 72px 16px 16px;
+	}
+
+	.setup {
+		grid-template-columns: repeat(6, minmax(0, 1fr));
+	}
+
+	.setup-field-name,
+	.setup-field-join {
+		grid-column: span 2;
+	}
+
+	.players {
+		grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+	}
+
+	.modal-content {
+		width: min(90vw, 620px);
+	}
+}
+
+@media (min-width: 1024px) {
+	.container {
+		padding: 80px 18px 18px;
+	}
+
+	.setup {
+		grid-template-columns: minmax(160px, 1.4fr) repeat(6, minmax(68px, auto)) minmax(180px, 1.6fr) repeat(2, auto);
+	}
+
+	.setup-field-name,
+	.setup-field-join {
+		grid-column: auto;
+	}
+
+	.players {
+		grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+	}
+
+	.game-area {
+		grid-template-columns: minmax(0, 1.35fr) minmax(280px, 0.75fr);
+		grid-template-areas:
+			"table log"
+			"hand log";
+		grid-template-rows: auto auto;
+		align-items: stretch;
+	}
+
+	body[data-auto-scale="true"] .game-area {
+		grid-template-columns: minmax(0, 1.35fr) minmax(280px, var(--log-column-track));
+		grid-template-rows:
+			minmax(180px, var(--table-track))
+			minmax(220px, var(--hand-track));
+	}
+
+	.controls.sticky {
+		position: sticky;
+		left: auto;
+		right: auto;
+		bottom: 12px;
+		z-index: 60;
+	}
+
+	.container.has-sticky-controls {
+		padding-bottom: 18px;
+	}
+
+	.log {
+		min-height: 0;
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	*,
+	*::before,
+	*::after {
+		animation: none !important;
+		transition: none !important;
+		scroll-behavior: auto !important;
+	}
+}
+</style>
+</head>
+<body>
+
+<button class="options-btn" id="optionsBtn" type="button" aria-label="Open settings"><span aria-hidden="true">⚙</span></button>
+
+<div class="swap-screen" id="swapScreen" role="dialog" aria-modal="true" aria-labelledby="swapRole">
+	<div class="swap-content">
+		<div class="swap-title">🎭 Card Exchange</div>
+		<div class="swap-role" id="swapRole"></div>
+		<div class="swap-instruction" id="swapInstruction"></div>
+		<div class="swap-selected" id="swapSelected"></div>
+		<div class="swap-caption">Select Cards:</div>
+		<div class="swap-cards" id="swapCards"></div>
+		<button class="swap-button" type="button" onclick="submitCardExchange()" id="submitBtn">Submit Exchange</button>
+	</div>
+</div>
+
+<div class="modal" id="optionsModal" role="dialog" aria-modal="true" aria-labelledby="settingsTitle" aria-describedby="settingsLead">
+	<div class="modal-content">
+		<button class="modal-close" id="closeOptionsBtn" type="button" onclick="closeOptions()" aria-label="Close settings"><span aria-hidden="true">×</span></button>
+		<div class="settings-header">
+			<div class="settings-eyebrow">Live Controls</div>
+			<h2 class="settings-title" id="settingsTitle">Table Settings</h2>
+			<p class="settings-lead" id="settingsLead">Adjust sound, pacing, and layout while you play. Changes apply immediately on this device.</p>
+		</div>
+		<div class="version-info">
+			<div>Multiplayer President</div>
+			<div>Reconnect-safe identities and host controls</div>
+			<div>CPU tables and spectator view supported</div>
+			<div>Gameplay variants are chosen in the lobby before creation</div>
+			<div class="settings-meta">
+				<span class="settings-chip">Live Preview</span>
+				<span class="settings-chip">Local Preferences</span>
+				<span class="settings-chip">Mobile Friendly</span>
+			</div>
+		</div>
+
+		<div class="settings-section settings-section--primary">
+			<div class="settings-section-title">Primary Settings</div>
+			<div class="settings-section-copy">Audio and utility controls that affect moment-to-moment play.</div>
+			<div class="settings-stack">
+				<div class="toggle">
+					<div class="toggle-copy">
+						<span class="toggle-title">🔊 Sound Effects</span>
+						<span class="toggle-description">Play interface sounds for turns, joins, and actions.</span>
+					</div>
+					<button class="toggle-switch" id="soundToggle" type="button" aria-pressed="false" aria-label="Toggle sound effects">
+						<span class="toggle-slider"></span>
+					</button>
+				</div>
+
+				<div class="toggle">
+					<div class="toggle-copy">
+						<span class="toggle-title toggle-label-accent">🔔 Turn Notification Only</span>
+						<span class="toggle-description">Keep alerts focused on your turn instead of every table event.</span>
+					</div>
+					<button class="toggle-switch" id="turnNotificationToggle" type="button" aria-pressed="false" aria-label="Toggle turn notifications only">
+						<span class="toggle-slider"></span>
+					</button>
+				</div>
+
+				<div class="scale-row">
+					<label for="soundVolume">Volume</label>
+					<input type="range" id="soundVolume" min="0" max="100" step="5" value="50">
+					<span id="soundVolumeVal">50%</span>
+				</div>
+
+				<div class="toggle toggle-spaced">
+					<div class="toggle-copy">
+						<span class="toggle-title toggle-label-primary">📌 Sticky Buttons</span>
+						<span class="toggle-description">Keep the action buttons pinned near the bottom on smaller screens.</span>
+					</div>
+					<button class="toggle-switch" id="stickyButtonsToggle" type="button" aria-pressed="false" aria-label="Toggle sticky action buttons">
+						<span class="toggle-slider"></span>
+					</button>
+				</div>
+			</div>
+		</div>
+
+		<div class="settings-section">
+			<div class="settings-section-title">CPU Pace</div>
+			<div class="settings-section-copy">Speed up or slow down automated turns to match the kind of table you want.</div>
+			<div class="scale-group">
+				<div class="scale-label">⚡ CPU Turn Speed</div>
+				<div class="scale-row">
+					<label for="cpuSpeed">Speed</label>
+					<input type="range" id="cpuSpeed" min="0.3" max="2.0" step="0.1" value="1.0">
+					<span id="cpuSpeedVal">1.0x</span>
+				</div>
+			</div>
+			<div class="settings-note">Higher values make CPU turns feel snappier; lower values make the table easier to follow.</div>
+		</div>
+
+		<div class="settings-section">
+			<div class="settings-section-title">Responsive Layout</div>
+			<div class="settings-section-copy">Use the adaptive layout helpers below, then fine-tune proportions with the sliders that follow.</div>
+			<div class="settings-stack">
+				<div class="toggle">
+					<div class="toggle-copy">
+						<span class="toggle-title toggle-label-accent">🔄 Auto-Scale (Dynamic)</span>
+						<span class="toggle-description">Let the table, hand, and log stretch to fill the available space.</span>
+					</div>
+					<button class="toggle-switch" id="autoScaleToggle" type="button" aria-pressed="false" aria-label="Toggle automatic layout scaling">
+						<span class="toggle-slider"></span>
+					</button>
+				</div>
+
+				<div class="toggle">
+					<div class="toggle-copy">
+						<span class="toggle-title toggle-label-primary">📐 Auto Card Size</span>
+						<span class="toggle-description">Keep cards scaled to the play area so they stay readable without crowding.</span>
+					</div>
+					<button class="toggle-switch active" id="autoCardSizeToggle" type="button" aria-pressed="true" aria-label="Toggle automatic card sizing">
+						<span class="toggle-slider"></span>
+					</button>
+				</div>
+			</div>
+			<div class="settings-note">These helpers shape the layout automatically, while the slider groups below still give you manual control.</div>
+		</div>
+
+		<div class="settings-section">
+			<div class="settings-section-title">Layout Tuning</div>
+			<div class="settings-section-copy">Fine-tune proportions, card scale, and text density for this device.</div>
+			<div class="scale-group">
+				<div class="scale-label">📏 Area Proportions</div>
+				<div class="scale-row">
+					<label for="tableFlex">Table Proportion</label>
+					<input type="range" id="tableFlex" min="50" max="800" step="10" value="223">
+					<span id="tableFlexVal">223</span>
+				</div>
+				<div class="scale-row">
+					<label for="handFlex">Hand Proportion</label>
+					<input type="range" id="handFlex" min="100" max="1000" step="10" value="480">
+					<span id="handFlexVal">480</span>
+				</div>
+				<div class="scale-row">
+					<label for="logFlex">Log Proportion</label>
+					<input type="range" id="logFlex" min="40" max="400" step="10" value="99">
+					<span id="logFlexVal">99</span>
+				</div>
+			</div>
+
+			<div class="scale-group">
+				<div class="scale-label">🎴 Card Sizes</div>
+				<div class="scale-row">
+					<label for="handSize">Hand Cards</label>
+					<input type="range" id="handSize" min="1.0" max="10.0" step="0.1" value="3.7">
+					<span id="handSizeVal">3.7x</span>
+				</div>
+				<div class="scale-row">
+					<label for="tableSize">Table Cards</label>
+					<input type="range" id="tableSize" min="1.0" max="10.0" step="0.1" value="4.1">
+					<span id="tableSizeVal">4.1x</span>
+				</div>
+			</div>
+
+			<div class="scale-group">
+				<div class="scale-label">📊 Text Sizes</div>
+				<div class="scale-row">
+					<label for="playersSize">Players Track</label>
+					<input type="range" id="playersSize" min="0.5" max="4.0" step="0.1" value="2.0">
+					<span id="playersSizeVal">2.0x</span>
+				</div>
+				<div class="scale-row">
+					<label for="logSize">Log Text</label>
+					<input type="range" id="logSize" min="0.7" max="2.0" step="0.1" value="1.2">
+					<span id="logSizeVal">1.2x</span>
+				</div>
+				<div class="scale-row">
+					<label for="buttonSize">Buttons</label>
+					<input type="range" id="buttonSize" min="1.0" max="5.0" step="0.1" value="3.0">
+					<span id="buttonSizeVal">3.0x</span>
+				</div>
+				<div class="scale-row">
+					<label for="cardRadius">Card Corners</label>
+					<input type="range" id="cardRadius" min="2" max="30" step="1" value="11">
+					<span id="cardRadiusVal">11px</span>
+				</div>
+			</div>
+			<div class="settings-note">Every change updates the current view immediately, so you can tune until the table feels balanced.</div>
+		</div>
+
+		<div class="settings-actions">
+			<button class="settings-done" type="button" onclick="closeOptions()">Done</button>
+		</div>
+	</div>
+</div>
+
+<div class="container">
+	<button id="toggleCreationBar" type="button" aria-expanded="true">☰ Create/Join</button>
+	<div class="setup">
+		<input class="setup-field-name" type="text" id="playerName" placeholder="Name" value="Player" aria-label="Player name">
+		<select class="setup-field-players" id="numPlayers" aria-label="Total players">
+			<option value="2">2P</option>
+			<option value="3">3P</option>
+			<option value="4" selected>4P</option>
+			<option value="5">5P</option>
+			<option value="6">6P</option>
+			<option value="7">7P</option>
+			<option value="8">8P</option>
+		</select>
+		<select class="setup-field-cpu" id="numCPU" aria-label="CPU players">
+			<option value="0">0</option>
+			<option value="1">1</option>
+			<option value="2">2</option>
+			<option value="3">3</option>
+			<option value="4">4</option>
+			<option value="5">5</option>
+			<option value="6">6</option>
+			<option value="7">7</option>
+		</select>
+		<button class="setup-action-create" type="button" onclick="createGame()">CREATE</button>
+		<button class="setup-action-create-cpu" type="button" onclick="createCPUOnlyGame()">CPU GAME</button>
+		<button class="room-btn setup-room-link" id="roomDisplay" type="button" title="Click to copy room link" onclick="copyRoomURL()" aria-label="Copy room link" hidden>📋</button>
+		<div class="settings-section settings-section--primary setup-gameplay-section">
+			<div class="settings-section-title">Gameplay Variants</div>
+			<div class="settings-section-copy">Choose the rule set now. These values are captured when you create the room and stay fixed for the whole game.</div>
+			<div class="settings-stack">
+				<div class="toggle">
+					<div class="toggle-copy">
+						<span class="toggle-title">🃏 J♦ Bomb</span>
+						<span class="toggle-description">Make the Jack of Diamonds a bomb that beats most plays but still loses to perfect 666.</span>
+					</div>
+					<button class="toggle-switch active" id="jackOfDiamondsBombToggle" type="button" aria-pressed="true" aria-label="Toggle Jack of Diamonds bomb rule">
+						<span class="toggle-slider"></span>
+					</button>
+				</div>
+
+				<div class="toggle">
+					<div class="toggle-copy">
+						<span class="toggle-title">💠 Perfect 666</span>
+						<span class="toggle-description">Make three 6s a top bomb that beats the Jack of Diamonds and every other play.</span>
+					</div>
+					<button class="toggle-switch" id="tripleSixesBeatJdToggle" type="button" aria-pressed="false" aria-label="Toggle perfect 666 rule">
+						<span class="toggle-slider"></span>
+					</button>
+				</div>
+
+				<div class="toggle">
+					<div class="toggle-copy">
+						<span class="toggle-title">🏃 Runs Allowed</span>
+						<span class="toggle-description">Allow sequential same-suit runs when the table uses run plays.</span>
+					</div>
+					<button class="toggle-switch" id="runsAllowedToggle" type="button" aria-pressed="false" aria-label="Toggle run plays">
+						<span class="toggle-slider"></span>
+					</button>
+				</div>
+
+				<div class="scale-row">
+					<label for="minRunLength">Minimum Run Length</label>
+					<input type="range" id="minRunLength" min="3" max="11" step="1" value="3">
+					<span id="minRunLengthVal">3</span>
+				</div>
+
+				<div class="scale-row">
+					<label for="maxRunLength">Maximum Run Length</label>
+					<input type="range" id="maxRunLength" min="3" max="11" step="1" value="5">
+					<span id="maxRunLengthVal">5</span>
+				</div>
+			</div>
+		</div>
+		<input class="setup-field-join" type="text" id="joinCode" placeholder="Code" value="" aria-label="Room code">
+		<button class="setup-action-join" type="button" onclick="joinGame()">JOIN</button>
+		<button class="setup-action-start" type="button" onclick="startGame()" id="startBtn" aria-label="Start game" hidden>Start Round</button>
+	</div>
+
+	<div class="top-bar" id="turn" aria-live="polite">Waiting for players</div>
+
+	<div class="players" id="players" aria-label="Players"></div>
+
+	<div class="game-area">
+		<div class="table" id="table" aria-label="Table">Table (empty)</div>
+
+		<div id="hand-container">
+			<div id="hand-title">Your Hand</div>
+			<div id="cards-wrapper" aria-label="Your cards"></div>
+		</div>
+
+		<div class="log" id="log" aria-live="polite" aria-label="Game log"></div>
+	</div>
+
+	<div class="controls" id="controls">
+		<button type="button" id="playBtn" onclick="playCards()">PLAY</button>
+		<button type="button" id="clearBtn" onclick="clearSelection()">CLEAR</button>
+		<button type="button" id="passBtn" onclick="passTurn()">PASS</button>
+	</div>
+</div>
+
+<script src="game.js"></script>
+</body>
+</html>
