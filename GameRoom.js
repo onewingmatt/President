@@ -20,7 +20,7 @@ export class GameRoom {
     /** @type {string|null} */
     this.hostId = host;
     /** @type {object} */
-    this.options = Object.assign({}, GameRules.getDefaultOptions(), opts);
+    this.options = GameRules.normalizeOptions(opts);
     /** @type {Array<object>} */
     this.players = [];
     /** @type {Array<object>} */
@@ -44,6 +44,20 @@ export class GameRoom {
   }
 
   /**
+   * Get the gameplay rule settings that should be visible to clients.
+   * @returns {object}
+   */
+  getGameplayRules() {
+    return {
+      jackOfDiamondsBomb: this.options.jackOfDiamondsBomb !== false,
+      tripleSixesBeatJd: this.options.tripleSixesBeatJd === true,
+      runsAllowed: this.options.runsAllowed === true,
+      minRunLength: Math.max(3, Math.min(GameRules.runRanks.length, Number(this.options.minRunLength) || 3)),
+      maxRunLength: Math.max(3, Math.min(GameRules.runRanks.length, Number(this.options.maxRunLength) || 5))
+    };
+  }
+
+  /**
    * Log a message to the game log and console.
    * @param {string} msg
    */
@@ -56,34 +70,67 @@ export class GameRoom {
 
   /**
    * Add a player to the room.
-   * @param {string} id
+   * @param {string} socketId
    * @param {string} name
    * @param {boolean} [isCPU=false]
-   * @returns {{success: boolean, error?: string}}
+   * @param {{playerId?: string, reconnectToken?: string}} [metadata]
+   * @returns {{success: boolean, error?: string, player?: object}}
    */
-  addPlayer(id, name, isCPU) {
+  addPlayer(socketId, name, isCPU, metadata) {
     if (isCPU === undefined) isCPU = false;
+    if (metadata === undefined) metadata = {};
+    const trimmedName = typeof name === 'string' ? name.trim() : '';
+    if (!trimmedName) {
+      return { success: false, error: 'Invalid player name' };
+    }
     if (this.players.length >= this.options.num_players) {
       return { success: false, error: 'Room full' };
     }
-    this.players.push({
-      id: id,
-      name: name,
+
+    const normalizedName = trimmedName.toLowerCase();
+    if (!isCPU) {
+      const duplicate = this.players.find(player => !player.isCPU && player.normalizedName === normalizedName);
+      if (duplicate) {
+        return { success: false, error: 'Name already taken' };
+      }
+    }
+
+    const player = {
+      id: metadata.playerId || socketId,
+      socketId: isCPU ? null : socketId,
+      name: trimmedName,
+      normalizedName: normalizedName,
+      reconnectToken: isCPU ? null : (metadata.reconnectToken || null),
       isCPU: isCPU,
+      connected: isCPU ? true : true,
       hand: [],
       finished: false,
       finishPosition: null
-    });
-    this.log(name + ' joined' + (isCPU ? ' (CPU)' : ''));
-    return { success: true };
+    };
+
+    this.players.push(player);
+    if (!this.hostId && !isCPU) {
+      this.hostId = player.id;
+    }
+    this.log(trimmedName + ' joined' + (isCPU ? ' (CPU)' : ''));
+    return { success: true, player: player };
+  }
+
+  /**
+   * Find a player by stable player id.
+   * @param {string} playerId
+   * @returns {object|undefined}
+   */
+  getPlayerById(playerId) {
+    return this.players.find(player => player.id === playerId);
   }
 
   /**
    * Deal cards to all players and sort their hands.
    */
   dealCards() {
-    const n = this.options.num_players > 4 ? 2 : 1;
-    const deck = new Deck(n);
+    const numDecks = Math.max(1, Number(this.options.num_decks) || 1);
+    const deck = new Deck(numDecks);
     deck.shuffle();
     const hands = deck.deal(this.players.length);
     for (let i = 0; i < this.players.length; i++) {
@@ -101,6 +148,9 @@ export class GameRoom {
    * @returns {{success: boolean, error?: string}}
    */
   startGame() {
+    if (this.gameState.phase !== 'waiting') {
+      return { success: false, error: 'Game already started' };
+    }
     if (this.players.length < 2) {
       return { success: false, error: 'Need at least 2 players' };
     }
@@ -123,7 +173,7 @@ export class GameRoom {
    */
   playCards(id, indices) {
     const p = this.players.find(x => x.id === id);
-    if (!p || this.gameState.phase !== 'playing' || p.finished) {
+    if (!p || this.gameState.phase !== 'playing' || p.finished || (!p.isCPU && p.connected === false)) {
       return { success: false, error: 'Invalid player state' };
     }
     if (this.players[this.gameState.currentPlayerIndex].id !== id) {
@@ -179,7 +229,7 @@ export class GameRoom {
    */
   passTurn(id) {
     const curr = this.players[this.gameState.currentPlayerIndex];
-    if (curr.id !== id || curr.finished) {
+    if (curr.id !== id || curr.finished || (!curr.isCPU && curr.connected === false)) {
       return { success: false };
     }
     if (this.gameState.lastPlay.type === 'none') {
@@ -276,9 +326,12 @@ export class GameRoom {
   submitSwap(id, indices) {
     if (this.gameState.phase !== 'swapping') return { success: false };
     const s = this.gameState.swapPending[id];
-    if (!s || indices.length !== s.count) return { success: false };
+    if (!s || !Array.isArray(indices) || indices.length !== s.count) return { success: false };
     const p = this.players.find(x => x.id === id);
-    if (!p) return { success: false };
+    if (!p || (!p.isCPU && p.connected === false)) return { success: false };
+    if (indices.some(i => !Number.isInteger(i) || i < 0 || i >= p.hand.length) || new Set(indices).size !== indices.length) {
+      return { success: false };
+    }
     const sel = indices.map(i => p.hand[i]).filter(c => c);
     if (sel.length !== s.count) return { success: false };
     s.cards = sel;
@@ -371,12 +424,183 @@ export class GameRoom {
   }
 
   /**
+   * Find a human player by their socket id.
+   * @param {string} socketId
+   * @returns {object|undefined}
+   */
+  getPlayerBySocketId(socketId) {
+    return this.players.find(player => !player.isCPU && player.socketId === socketId);
+  }
+
+  /**
+   * Resolve a socket id to the stable player id.
+   * @param {string} socketId
+   * @returns {string|null}
+   */
+  getPlayerIdBySocketId(socketId) {
+    const player = this.getPlayerBySocketId(socketId);
+    return player ? player.id : null;
+  }
+
+  /**
+   * Find a reconnectable player by token.
+   * @param {string} reconnectToken
+   * @returns {object|undefined}
+   */
+  getPlayerByReconnectToken(reconnectToken) {
+    return this.players.find(player => player.reconnectToken === reconnectToken);
+  }
+
+  /**
+   * Reconnect an existing player without changing their stable player id.
+   * @param {string} reconnectToken
+   * @param {string} socketId
+   * @returns {{success: boolean, error?: string, player?: object}}
+   */
+  reconnectPlayer(reconnectToken, socketId) {
+    const player = this.getPlayerByReconnectToken(reconnectToken);
+    if (!player) {
+      return { success: false, error: 'Reconnect token not found' };
+    }
+
+    player.socketId = socketId;
+    player.connected = true;
+    player.isCPU = false;
+    return { success: true, player: player };
+  }
+
+  /**
+   * Promote a disconnected human player to CPU control.
+   * @param {string} playerId
+   * @returns {{success: boolean, error?: string, player?: object}}
+   */
+  promoteDisconnectedPlayerToCPU(playerId) {
+    const player = this.getPlayerById(playerId);
+    if (!player) {
+      return { success: false, error: 'Player not found' };
+    }
+
+    if (player.isCPU || player.connected !== false || player.finished) {
+      return { success: false, error: 'Player is not eligible for takeover' };
+    }
+
+    player.isCPU = true;
+    player.connected = true;
+    this.log(player.name + ' was taken over by a bot');
+    return { success: true, player: player };
+  }
+
+  /**
+   * Choose the cards a bot should give away during a swap.
+   * @param {string} playerId
+   * @returns {Array<number>}
+   */
+  getBotSwapIndices(playerId) {
+    const player = this.getPlayerById(playerId);
+    const pendingSwap = this.gameState.swapPending[playerId];
+    if (!player || !pendingSwap) {
+      return [];
+    }
+
+    const suitOrder = { 'C': 0, 'D': 1, 'H': 2, 'S': 3 };
+    return player.hand
+      .map((card, index) => ({
+        index: index,
+        value: RankSystem.rankValue(card, this.options),
+        suitOrder: suitOrder[card.suit] || 0
+      }))
+      .sort((a, b) => b.value - a.value || b.suitOrder - a.suitOrder || a.index - b.index)
+      .slice(0, pendingSwap.count)
+      .map(entry => entry.index);
+  }
+
+  /**
+   * Check whether the provided socket currently belongs to the host.
+   * @param {string} socketId
+   * @returns {boolean}
+   */
+  isHostSocket(socketId) {
+    const playerId = this.getPlayerIdBySocketId(socketId);
+    return Boolean(playerId) && playerId === this.hostId;
+  }
+
+  /**
+   * Reassign the host to the next available human player.
+   * @returns {string|null}
+   */
+  reassignHost() {
+    const nextHost = this.players.find(player => !player.isCPU);
+    this.hostId = nextHost ? nextHost.id : null;
+    return this.hostId;
+  }
+
+  /**
+   * Disconnect a human player or spectator by socket id.
+   * @param {string} socketId
+   * @returns {{success: boolean, type?: string, player?: object, spectator?: object, error?: string}}
+   */
+  disconnectSocket(socketId) {
+    const spectatorIndex = this.spectators.findIndex(spectator => spectator.id === socketId);
+    if (spectatorIndex !== -1) {
+      const spectator = this.spectators[spectatorIndex];
+      this.spectators.splice(spectatorIndex, 1);
+      this.log(spectator.name + ' left as spectator');
+      return { success: true, type: 'spectator-removed', spectator: spectator };
+    }
+
+    const player = this.getPlayerBySocketId(socketId);
+    if (!player) {
+      return { success: false, error: 'Socket not found' };
+    }
+
+    if (this.gameState.phase === 'waiting') {
+      const playerIndex = this.players.findIndex(entry => entry.id === player.id);
+      if (playerIndex !== -1) {
+        this.players.splice(playerIndex, 1);
+      }
+      if (this.hostId === player.id) {
+        this.reassignHost();
+      }
+      this.log(player.name + ' left');
+      return { success: true, type: 'player-removed', player: player };
+    }
+
+    player.connected = false;
+    player.socketId = null;
+    this.log(player.name + ' disconnected');
+    return { success: true, type: 'player-disconnected', player: player };
+  }
+
+  /**
+   * Check if any human players are currently connected.
+   * @returns {boolean}
+   */
+  hasConnectedHumans() {
+    return this.players.some(player => !player.isCPU && player.connected !== false);
+  }
+
+  /**
+   * Check if any spectators are currently connected.
+   * @returns {boolean}
+   */
+  hasConnectedSpectators() {
+    return this.spectators.length > 0;
+  }
+
+  /**
+   * Check if the room has any connected non-CPU participants.
+   * @returns {boolean}
+   */
+  hasConnectedParticipants() {
+    return this.hasConnectedHumans() || this.hasConnectedSpectators();
+  }
+
+  /**
    * Check if the room has no human players.
    * @returns {boolean}
    */
   isEmpty() {
-    // Room is considered empty if it has no human players
-    return this.players.filter(p => !p.isCPU).length === 0;
+    return this.players.filter(p => !p.isCPU).length === 0 && this.spectators.length === 0;
   }
 
   /**
@@ -384,8 +608,7 @@ export class GameRoom {
    * @returns {boolean}
    */
   isInactive() {
-    // Room is inactive if all human players have finished and only CPUs remain
-    const activePlayers = this.players.filter(p => !p.finished && !p.isCPU);
+    const activePlayers = this.players.filter(p => !p.finished && !p.isCPU && p.connected !== false);
     return activePlayers.length === 0;
   }
 
@@ -404,13 +627,20 @@ export class GameRoom {
    * @returns {{success: boolean}}
    */
   addSpectator(id, name) {
-    this.spectators.push({
+    const existing = this.spectators.find(spectator => spectator.id === id);
+    if (existing) {
+      return { success: true, spectator: existing };
+    }
+
+    const spectator = {
       id: id,
       name: name || 'Spectator',
       joinedAt: new Date().toISOString()
-    });
-    this.log(name + ' joined as spectator');
-    return { success: true };
+    };
+
+    this.spectators.push(spectator);
+    this.log(spectator.name + ' joined as spectator');
+    return { success: true, spectator: spectator };
   }
 
   /**
@@ -436,18 +666,27 @@ export class GameRoom {
    */
   getSpectatorState(spectatorId) {
     const curr = this.players[this.gameState.currentPlayerIndex];
+    const cpuSpeedMultiplier = Math.max(0.3, Math.min(2, Number(this.options.cpuSpeedMultiplier) || 1));
     return {
       roomCode: this.roomCode,
       phase: this.gameState.phase,
       round: this.gameState.round,
+      viewerId: null,
+      isHost: false,
+      canStart: false,
       currentPlayerName: curr ? curr.name : null,
       currentPlayerId: curr ? curr.id : null,
       lastPlay: this.gameState.lastPlay,
+      settings: {
+        cpuSpeedMultiplier: cpuSpeedMultiplier,
+        gameplayRules: this.getGameplayRules()
+      },
       roles: this.gameState.roles,
       players: this.players.map(p => ({
         id: p.id,
         name: p.name,
         isCPU: p.isCPU,
+        connected: p.isCPU ? true : p.connected !== false,
         handSize: p.hand.length,
         finished: p.finished,
         hand: p.hand // Spectators see all hands
@@ -463,22 +702,33 @@ export class GameRoom {
    */
   getPublicState(rid) {
     const curr = this.players[this.gameState.currentPlayerIndex];
+    const hasEnoughPlayers = this.players.length >= 2;
+    const cpuSpeedMultiplier = Math.max(0.3, Math.min(2, Number(this.options.cpuSpeedMultiplier) || 1));
     return {
       roomCode: this.roomCode,
       phase: this.gameState.phase,
       round: this.gameState.round,
+      viewerId: rid,
+      isHost: rid ? this.hostId === rid : false,
+      canStart: Boolean(rid) && this.hostId === rid && this.gameState.phase === 'waiting' && hasEnoughPlayers,
       currentPlayerName: curr ? curr.name : null,
       currentPlayerId: curr ? curr.id : null,
       lastPlay: this.gameState.lastPlay,
+      settings: {
+        cpuSpeedMultiplier: cpuSpeedMultiplier,
+        gameplayRules: this.getGameplayRules()
+      },
       roles: this.gameState.roles,
       players: this.players.map(p => ({
         id: p.id,
         name: p.name,
         isCPU: p.isCPU,
+        connected: p.isCPU ? true : p.connected !== false,
         handSize: p.hand.length,
         finished: p.finished,
         hand: p.id === rid ? p.hand : null
-      }))
+      })),
+      isSpectator: false
     };
   }
 }

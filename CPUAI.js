@@ -1,5 +1,6 @@
 import { Validator } from './Validator.js';
 import { RankSystem } from './RankSystem.js';
+import { GameRules } from './GameRules.js';
 
 export class CPUAI {
 
@@ -45,12 +46,21 @@ export class CPUAI {
     }
     const requiredLength = lastPlay.length;
     const jdIndex = hand.findIndex(c => RankSystem.isJackOfDiamonds(c));
-    if (jdIndex !== -1 && requiredLength === 1) {
+    const jackBombEnabled = options && options.jackOfDiamondsBomb !== false;
+    if (jackBombEnabled && jdIndex !== -1 && !lastPlay.isTripleSix) {
       return { action: 'play', cardIndices: [jdIndex] };
     }
+
+    if (options && options.runsAllowed === true && lastPlay.type === 'run') {
+      const runPlay = this.findRunToBeat(hand, lastPlay, options);
+      if (runPlay) {
+        return { action: 'play', cardIndices: runPlay };
+      }
+    }
+
     const rankGroups = {};
     hand.forEach((card, idx) => {
-      if (RankSystem.isJackOfDiamonds(card)) return;
+      if (jackBombEnabled && RankSystem.isJackOfDiamonds(card)) return;
       if (!rankGroups[card.rank]) {
         rankGroups[card.rank] = [];
       }
@@ -103,5 +113,79 @@ export class CPUAI {
       }
     }
     return { action: 'pass' };
+  }
+
+  static findRunToBeat(hand, lastPlay, options) {
+    const runRanks = GameRules.runRanks;
+    const requiredLength = lastPlay.length;
+    const jackBombEnabled = options && options.jackOfDiamondsBomb !== false;
+    const jdIndex = jackBombEnabled ? hand.findIndex(card => RankSystem.isJackOfDiamonds(card)) : -1;
+
+    const suits = ['H', 'D', 'C', 'S'];
+    for (const suit of suits) {
+      const rankToIndices = new Map();
+      hand.forEach((card, index) => {
+        if (jackBombEnabled && RankSystem.isJackOfDiamonds(card)) {
+          return;
+        }
+
+        if (card.suit !== suit || !runRanks.includes(card.rank)) {
+          return;
+        }
+
+        if (!rankToIndices.has(card.rank)) {
+          rankToIndices.set(card.rank, []);
+        }
+
+        rankToIndices.get(card.rank).push(index);
+      });
+
+      for (let start = 0; start + requiredLength <= runRanks.length; start++) {
+        const end = start + requiredLength - 1;
+        if (end <= lastPlay.rank) {
+          continue;
+        }
+
+        const expectedRanks = runRanks.slice(start, end + 1);
+        const chosenIndices = [];
+        const usedIndices = new Set();
+        let usedJd = false;
+        let valid = true;
+
+        for (const rank of expectedRanks) {
+          const availableIndices = rankToIndices.get(rank) || [];
+          const nextIndex = availableIndices.find(index => !usedIndices.has(index));
+
+          if (nextIndex !== undefined) {
+            chosenIndices.push(nextIndex);
+            usedIndices.add(nextIndex);
+            continue;
+          }
+
+          if (!usedJd && jdIndex !== -1 && !usedIndices.has(jdIndex)) {
+            chosenIndices.push(jdIndex);
+            usedIndices.add(jdIndex);
+            usedJd = true;
+            continue;
+          }
+
+          valid = false;
+          break;
+        }
+
+        if (!valid || chosenIndices.length !== requiredLength) {
+          continue;
+        }
+
+        const candidateCards = chosenIndices.map(index => hand[index]);
+        const playType = Validator.getPlayType(candidateCards, options);
+        const canBeat = Validator.canBeatPlay(playType, lastPlay, options);
+        if (canBeat.canBeat) {
+          return chosenIndices;
+        }
+      }
+    }
+
+    return null;
   }
 }
