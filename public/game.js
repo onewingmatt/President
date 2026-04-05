@@ -298,7 +298,24 @@ function applyStickyControls() {
 }
 
 function canControlGameplaySettings() {
-  return !roomCode;
+  if (!roomCode) {
+    return true;
+  }
+
+  if (!currentState || currentState.phase !== 'waiting') {
+    return false;
+  }
+
+  if (currentState.isHost) {
+    return true;
+  }
+
+  return Boolean(
+    currentState.isSpectator &&
+    Array.isArray(currentState.players) &&
+    currentState.players.length > 0 &&
+    currentState.players.every(player => player && player.isCPU)
+  );
 }
 
 function getGameplayRulesFromSettings() {
@@ -416,7 +433,8 @@ function syncRoomSettings() {
 
   const payload = {
     roomCode,
-    cpuSpeed: clampNumber(settingsState.sliders.cpuSpeed, 0.3, 2.0, 1.0)
+    cpuSpeed: clampNumber(settingsState.sliders.cpuSpeed, 0.3, 2.0, 1.0),
+    gameplayRules: getGameplayRulesFromSettings()
   };
 
   socket.emit('update-room-settings', {
@@ -485,6 +503,8 @@ function updateSliderSetting(id, rawValue, options = {}) {
 
   if (id === 'cpuSpeed' && !skipRoomSync) {
     syncRoomSettings();
+  } else if ((id === 'minRunLength' || id === 'maxRunLength') && !skipRoomSync) {
+    syncRoomSettings();
   }
 
   if (persist) {
@@ -510,6 +530,10 @@ function setToggleState(id, isActive, options = {}) {
     applyStickyControls();
   } else if (id === 'autoScaleToggle' || id === 'autoCardSizeToggle') {
     applyLayoutSettings();
+  }
+
+  if (!skipRoomSync && (id === 'jackOfDiamondsBombToggle' || id === 'tripleSixesBeatJdToggle' || id === 'runsAllowedToggle')) {
+    syncRoomSettings();
   }
 
   if (id === 'soundToggle' && active && options.preview !== false) {
@@ -765,7 +789,7 @@ socket.on('game-created', (data) => {
 
   log('✅ Room created: ' + data.roomCode);
 
-  setSetupVisibility(false);
+  setSetupVisibility(true);
   updateActionButtons();
   updateSettingsAvailability();
   playUISound('success');
@@ -790,7 +814,7 @@ socket.on('cpu-game-created', (data) => {
 
   log('🤖 CPU game created: ' + data.roomCode);
 
-  setSetupVisibility(false);
+  setSetupVisibility(true);
   updateActionButtons();
   updateSettingsAvailability();
   syncRoomSettings();
@@ -824,7 +848,7 @@ socket.on('game-state-update', (state) => {
     startButton.hidden = !state.canStart;
   }
 
-  if (state.phase === 'waiting' && state.canStart) {
+  if (state.phase === 'waiting') {
     setSetupVisibility(true);
   } else if (state.phase === 'playing') {
     setSetupVisibility(false);

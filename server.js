@@ -700,6 +700,15 @@ io.on('connection', (socket) => {
         cpuSpeedMultiplier: sanitizeCpuSpeedMultiplier(data?.cpuSpeed)
       });
 
+      if (room.gameState.phase === 'waiting') {
+        const gameplayRules = normalizeGameplayRules(data?.gameplayRules);
+        nextOptions.jackOfDiamondsBomb = gameplayRules.jackOfDiamondsBomb;
+        nextOptions.tripleSixesBeatJd = gameplayRules.tripleSixesBeatJd;
+        nextOptions.runsAllowed = gameplayRules.runsAllowed;
+        nextOptions.minRunLength = gameplayRules.minRunLength;
+        nextOptions.maxRunLength = gameplayRules.maxRunLength;
+      }
+
       room.options = GameRules.normalizeOptions(nextOptions);
       touchRoom(roomCode);
       emitRoomState(io, room);

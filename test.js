@@ -5,6 +5,7 @@ import { RankSystem } from './RankSystem.js';
 import { Validator } from './Validator.js';
 import { Card } from './Card.js';
 import { GameRoom } from './GameRoom.js';
+import { GameRules } from './GameRules.js';
 import { RuntimeConfig } from './RuntimeConfig.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -110,6 +111,22 @@ test('Runtime, docs, and deployment files agree on the default port', function()
   assert(flyToml.includes('internal_port = ' + defaultPort));
   assert(readme.includes('http://localhost:' + defaultPort));
   assert(readme.includes('$env:PORT=' + defaultPort));
+});
+
+test('GameRules normalizes gameplay variant options', function() {
+  const options = GameRules.normalizeOptions({
+    jackOfDiamondsBomb: false,
+    tripleSixesBeatJd: true,
+    runsAllowed: true,
+    minRunLength: 2,
+    maxRunLength: 99
+  });
+
+  assert(options.jackOfDiamondsBomb === false, 'Expected J♦ bomb to remain disabled');
+  assert(options.tripleSixesBeatJd === true, 'Expected perfect 666 to remain enabled');
+  assert(options.runsAllowed === true, 'Expected runs to remain enabled');
+  assert(options.minRunLength === 3, 'Expected minimum run length to clamp to the lower bound');
+  assert(options.maxRunLength === GameRules.runRanks.length, 'Expected maximum run length to clamp to the upper bound');
 });
 
 console.log('');
