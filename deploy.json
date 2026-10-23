@@ -1,0 +1,6 @@
+{
+  "host": "onewing@107.172.153.240",
+  "container": "president",
+  "files": ["server.js", "package-lock.json"],
+  "url": "https://president.onewing.top/"
+}

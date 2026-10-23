@@ -5,7 +5,10 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "test": "node test.js"
+    "test": "node test.js",
+    "deploy:verify": "node scripts/deploy-verify.mjs",
+    "gate": "node scripts/gate.mjs",
+    "gate:strict": "node scripts/gate.mjs --strict"
   },
   "dependencies": {
     "express": "^4.18.2",
@@ -14,5 +17,11 @@
   },
   "engines": {
     "node": "18.x"
+  },
+  "gate": {
+    "floor": [
+      "test",
+      "deploy:verify"
+    ]
   }
 }
