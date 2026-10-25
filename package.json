@@ -6,14 +6,15 @@
   "scripts": {
     "start": "node server.js",
     "test": "node test.js",
+    "audit": "node scripts/independent-rules-check.mjs",
     "deploy:verify": "node scripts/deploy-verify.mjs",
     "gate": "node scripts/gate.mjs",
     "gate:strict": "node scripts/gate.mjs --strict"
   },
   "dependencies": {
+    "cors": "^2.8.5",
     "express": "^4.18.2",
-    "socket.io": "^4.7.2",
-    "cors": "^2.8.5"
+    "socket.io": "^4.7.2"
   },
   "engines": {
     "node": "18.x"
@@ -21,6 +22,7 @@
   "gate": {
     "floor": [
       "test",
+      "audit",
       "deploy:verify"
     ]
   }
